@@ -120,3 +120,15 @@ def load_vault(path, master_password):
     )
 
     return json.loads(plaintext)
+
+def save_vault(path, master_password, vault_data):
+    """
+    Guarda nuevamente una boveda existente.
+    Los datos se vuelven a cifrar antes de escribirse al disco.
+    """
+
+    create_vault(
+        path,
+        master_password,
+        vault_data,
+    )
