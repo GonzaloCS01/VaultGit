@@ -11,7 +11,12 @@ def generate_salt():
     return utils.random(pwhash.argon2id.SALTBYTES)
 
 
-def derive_key(master_password, salt):
+def derive_key(
+    master_password,
+    salt,
+    opslimit=pwhash.argon2id.OPSLIMIT_MODERATE,
+    memlimit=pwhash.argon2id.MEMLIMIT_MODERATE,
+):
     """
     Deriva una clave criptografica de 32 bytes
     desde la contraseña maestra usando Argon2id.
@@ -22,8 +27,8 @@ def derive_key(master_password, salt):
         secret.Aead.KEY_SIZE,
         password_bytes,
         salt,
-        opslimit=pwhash.argon2id.OPSLIMIT_MODERATE,
-        memlimit=pwhash.argon2id.MEMLIMIT_MODERATE,
+        opslimit=opslimit,
+        memlimit=memlimit,
     )
 
     return key
@@ -47,7 +52,7 @@ def encrypt_text(key, plaintext):
 
 def decrypt_text(key, encrypted):
     """
-    Descifra información previamente cifrada.
+    Descifra informacion previamente cifrada.
     """
     box = secret.Aead(key)
 

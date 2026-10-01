@@ -1,48 +1,91 @@
+from getpass import getpass
+from pathlib import Path
+
 from nacl.exceptions import CryptoError
 
-from crypto import (
-    generate_salt,
-    derive_key,
-    encrypt_text,
-    decrypt_text,
-)
+from vault import create_vault, load_vault
 
 
-def main():
-    master_password = "ClaveDePrueba123!"
+VAULT_PATH = Path("data/vault.vault")
 
-    salt = generate_salt()
-    key = derive_key(master_password, salt)
 
-    test_data = (
-        "Servicio: ExampleMail | "
-        "Usuario: usuario@ejemplo.com | "
-        "Password: Demo-8472!"
+def create_new_vault():
+    print("No existe una boveda. Vamos a crearla.")
+
+    password = getpass(
+        "Crea una contraseña maestra DE PRUEBA: "
     )
 
-    encrypted = encrypt_text(key, test_data)
-    decrypted = decrypt_text(key, encrypted)
+    confirmation = getpass(
+        "Repite la contraseña maestra: "
+    )
 
-    print("VaultGit - prueba criptografica")
-    print("--------------------------------")
-    print("Salt generado:", salt.hex())
-    print("Longitud de clave:", len(key), "bytes")
-    print("Datos originales:", test_data)
-    print("Datos cifrados:", encrypted.hex()[:80] + "...")
-    print("Datos descifrados:", decrypted)
+    if password != confirmation:
+        print("Las contraseñas no coinciden.")
+        return
 
-    wrong_key = derive_key(
-        "PasswordIncorrecta!",
-        salt,
+    demo_data = {
+        "accounts": [
+            {
+                "service": "ExampleMail",
+                "username": "usuario@ejemplo.com",
+                "password": "Demo-8472!",
+            }
+        ]
+    }
+
+    create_vault(
+        VAULT_PATH,
+        password,
+        demo_data,
+    )
+
+    print("Boveda cifrada creada correctamente.")
+
+
+def open_existing_vault():
+    password = getpass(
+        "Contraseña maestra: "
     )
 
     try:
-        decrypt_text(wrong_key, encrypted)
-
-        print("ERROR: La clave incorrecta pudo descifrar los datos.")
+        vault_data = load_vault(
+            VAULT_PATH,
+            password,
+        )
 
     except CryptoError:
-        print("Prueba correcta: una contraseña incorrecta NO puede descifrar la información.")
+        print(
+            "Contraseña incorrecta o boveda manipulada."
+        )
+        return
+
+    print("Boveda desbloqueada correctamente.")
+
+    accounts = vault_data.get("accounts", [])
+
+    print(
+        "Cuentas almacenadas:",
+        len(accounts),
+    )
+
+    for account in accounts:
+        print(
+            "-",
+            account["service"],
+            "|",
+            account["username"],
+        )
+
+
+def main():
+    print("VaultGit")
+    print("--------")
+
+    if VAULT_PATH.exists():
+        open_existing_vault()
+    else:
+        create_new_vault()
 
 
 if __name__ == "__main__":
