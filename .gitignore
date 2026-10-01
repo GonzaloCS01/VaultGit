@@ -1,0 +1,32 @@
+# ==============================
+# VaultGit - Git Ignore
+# ==============================
+
+# Entornos virtuales de Python
+.venv/
+venv/
+
+# Archivos temporales de Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Datos privados de VaultGit
+data/*
+!data/.gitkeep
+
+# Archivos de bóveda
+*.vault
+*.enc
+
+# Secretos y claves
+.env
+*.key
+*.pem
+
+# Logs
+*.log
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
