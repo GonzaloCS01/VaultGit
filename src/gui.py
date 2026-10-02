@@ -26,6 +26,9 @@ from backup import (
 
 from vault import (
     create_vault,
+    get_vault_kdf_profile,
+    migrate_vault_kdf,
+    needs_kdf_upgrade,
     save_vault_with_session,
     unlock_vault,
 )
@@ -947,6 +950,15 @@ class VaultGitGUI(tk.Tk):
             header,
             "Backups",
             self.open_backups_window,
+        ).pack(
+            side="right",
+            padx=(0, 10),
+        )
+
+        self.create_secondary_button(
+            header,
+            "Seguridad",
+            self.open_security_window,
         ).pack(
             side="right",
             padx=(0, 10),
@@ -2053,6 +2065,402 @@ class VaultGitGUI(tk.Tk):
         self.vault_data = candidate_data
 
         self.refresh_accounts()
+
+
+    # =========================================================
+    # SEGURIDAD / MIGRACION KDF
+    # =========================================================
+
+    def open_security_window(self):
+        window = tk.Toplevel(
+            self
+        )
+
+        window.title(
+            "Seguridad de la bóveda"
+        )
+
+        window.geometry(
+            "660x500"
+        )
+
+        window.resizable(
+            False,
+            False,
+        )
+
+        window.configure(
+            bg="#181b21"
+        )
+
+        tk.Label(
+            window,
+            text="Seguridad de la bóveda",
+            font=(
+                "Segoe UI",
+                19,
+                "bold",
+            ),
+            bg="#181b21",
+            fg="white",
+        ).pack(
+            pady=(26, 6)
+        )
+
+        tk.Label(
+            window,
+            text=(
+                "VaultGit puede actualizar el coste de Argon2id "
+                "sin cambiar tus credenciales."
+            ),
+            font=(
+                "Segoe UI",
+                9,
+            ),
+            bg="#181b21",
+            fg="#9ca3af",
+        ).pack(
+            pady=(0, 20)
+        )
+
+        card = tk.Frame(
+            window,
+            bg="#22262f",
+            padx=26,
+            pady=22,
+        )
+
+        card.pack(
+            fill="x",
+            padx=34,
+        )
+
+        current_title = tk.Label(
+            card,
+            text="Perfil Argon2id actual",
+            font=(
+                "Segoe UI",
+                10,
+                "bold",
+            ),
+            bg="#22262f",
+            fg="#9ca3af",
+        )
+
+        current_title.pack(
+            anchor="w"
+        )
+
+        current_profile_label = tk.Label(
+            card,
+            text="",
+            font=(
+                "Consolas",
+                11,
+            ),
+            bg="#22262f",
+            fg="white",
+            justify="left",
+        )
+
+        current_profile_label.pack(
+            anchor="w",
+            pady=(6, 18),
+        )
+
+        recommended_title = tk.Label(
+            card,
+            text="Perfil recomendado VaultGit V1",
+            font=(
+                "Segoe UI",
+                10,
+                "bold",
+            ),
+            bg="#22262f",
+            fg="#9ca3af",
+        )
+
+        recommended_title.pack(
+            anchor="w"
+        )
+
+        recommended_profile_label = tk.Label(
+            card,
+            text=(
+                "4 operaciones / 512 MiB"
+            ),
+            font=(
+                "Consolas",
+                11,
+            ),
+            bg="#22262f",
+            fg="white",
+        )
+
+        recommended_profile_label.pack(
+            anchor="w",
+            pady=(6, 18),
+        )
+
+        status_label = tk.Label(
+            card,
+            text="",
+            font=(
+                "Segoe UI",
+                10,
+                "bold",
+            ),
+            bg="#22262f",
+            fg="#9ca3af",
+        )
+
+        status_label.pack(
+            anchor="w"
+        )
+
+        tk.Label(
+            window,
+            text=(
+                "Antes de una actualización VaultGit verifica "
+                "la contraseña maestra y crea un backup cifrado "
+                "del estado actual."
+            ),
+            font=(
+                "Segoe UI",
+                9,
+            ),
+            bg="#181b21",
+            fg="#9ca3af",
+            wraplength=560,
+            justify="left",
+        ).pack(
+            pady=(20, 14)
+        )
+
+        button_row = tk.Frame(
+            window,
+            bg="#181b21",
+        )
+
+        button_row.pack(
+            fill="x",
+            padx=34,
+            pady=(4, 0),
+        )
+
+        upgrade_button = self.create_primary_button(
+            button_row,
+            "Actualizar protección",
+            lambda: None,
+        )
+
+        upgrade_button.pack(
+            side="right"
+        )
+
+        self.create_secondary_button(
+            button_row,
+            "Cerrar",
+            window.destroy,
+        ).pack(
+            side="right",
+            padx=(0, 10),
+        )
+
+        def refresh_security_status():
+            try:
+                profile = get_vault_kdf_profile(
+                    VAULT_PATH
+                )
+
+                requires_upgrade = needs_kdf_upgrade(
+                    VAULT_PATH
+                )
+
+            except (
+                OSError,
+                ValueError,
+                KeyError,
+                TypeError,
+                binascii.Error,
+            ):
+                current_profile_label.config(
+                    text="No disponible"
+                )
+
+                status_label.config(
+                    text="No se pudo leer el perfil de seguridad.",
+                    fg="#ffb4b4",
+                )
+
+                upgrade_button.config(
+                    state="disabled"
+                )
+                return
+
+            memory_mib = (
+                profile["memlimit"]
+                // (1024 * 1024)
+            )
+
+            current_profile_label.config(
+                text=(
+                    f"{profile['opslimit']} operaciones / "
+                    f"{memory_mib} MiB"
+                )
+            )
+
+            if requires_upgrade:
+                status_label.config(
+                    text=(
+                        "Actualización recomendada: "
+                        "la bóveda usa un perfil anterior."
+                    ),
+                    fg="#f5c26b",
+                )
+
+                upgrade_button.config(
+                    state="normal"
+                )
+
+            else:
+                status_label.config(
+                    text=(
+                        "Protección actualizada: "
+                        "la bóveda ya usa el perfil recomendado."
+                    ),
+                    fg="#75d69c",
+                )
+
+                upgrade_button.config(
+                    state="disabled"
+                )
+
+        def perform_kdf_upgrade():
+            password = simpledialog.askstring(
+                "Actualizar protección",
+                (
+                    "Introduce tu contraseña maestra para "
+                    "autorizar la actualización:"
+                ),
+                show="●",
+                parent=window,
+            )
+
+            if password is None:
+                return
+
+            if not password:
+                messagebox.showwarning(
+                    "VaultGit",
+                    "Introduce tu contraseña maestra.",
+                    parent=window,
+                )
+                return
+
+            # Primero verificamos la contraseña SIN modificar
+            # el archivo actual.
+            try:
+                unlock_vault(
+                    VAULT_PATH,
+                    password,
+                )
+
+            except CryptoError:
+                messagebox.showerror(
+                    "VaultGit",
+                    "Contraseña maestra incorrecta.",
+                    parent=window,
+                )
+                return
+
+            except (
+                OSError,
+                ValueError,
+                KeyError,
+                TypeError,
+                binascii.Error,
+            ):
+                messagebox.showerror(
+                    "VaultGit",
+                    (
+                        "No se pudo verificar la bóveda "
+                        "antes de la actualización."
+                    ),
+                    parent=window,
+                )
+                return
+
+            try:
+                safety_backup = create_backup(
+                    VAULT_PATH,
+                    BACKUP_DIR,
+                    prefix="pre-kdf-upgrade",
+                    keep=None,
+                )
+
+                (
+                    migrated_data,
+                    migrated_session,
+                ) = migrate_vault_kdf(
+                    VAULT_PATH,
+                    password,
+                )
+
+            except CryptoError:
+                messagebox.showerror(
+                    "VaultGit",
+                    (
+                        "La contraseña dejó de ser válida "
+                        "durante la migración."
+                    ),
+                    parent=window,
+                )
+                return
+
+            except (
+                OSError,
+                ValueError,
+                KeyError,
+                TypeError,
+                binascii.Error,
+            ):
+                messagebox.showerror(
+                    "VaultGit",
+                    (
+                        "No se pudo completar la actualización. "
+                        "La bóveda no debería quedar modificada."
+                    ),
+                    parent=window,
+                )
+                return
+
+            finally:
+                password = None
+
+            self.vault_data = migrated_data
+            self.session = migrated_session
+
+            self.reset_auto_lock_timer()
+
+            refresh_security_status()
+
+            messagebox.showinfo(
+                "VaultGit",
+                (
+                    "Protección Argon2id actualizada "
+                    "correctamente.\n\n"
+                    "Se creó un backup cifrado previo:\n"
+                    f"{safety_backup.name}"
+                ),
+                parent=window,
+            )
+
+        upgrade_button.config(
+            command=perform_kdf_upgrade
+        )
+
+        refresh_security_status()
 
     # =========================================================
     # BACKUPS CIFRADOS
