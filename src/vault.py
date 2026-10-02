@@ -15,8 +15,17 @@ from crypto import (
 
 VAULT_VERSION = 1
 
-KDF_OPSLIMIT = pwhash.argon2id.OPSLIMIT_MODERATE
-KDF_MEMLIMIT = pwhash.argon2id.MEMLIMIT_MODERATE
+# Perfil por defecto de VaultGit V1.
+#
+# Elegido después de medir en el equipo de desarrollo:
+# - 4 operaciones
+# - 512 MiB de memoria
+#
+# Las bóvedas guardan sus propios parámetros KDF,
+# por lo que las bóvedas antiguas siguen siendo compatibles.
+MIB = 1024 * 1024
+KDF_OPSLIMIT = 4
+KDF_MEMLIMIT = 512 * MIB
 
 
 def encode_base64(data):
@@ -159,7 +168,8 @@ def create_vault(
     vault_data,
 ):
     """
-    Crea una nueva boveda y deriva una nueva clave.
+    Crea una nueva boveda usando el perfil KDF
+    por defecto actual de VaultGit.
     """
 
     salt = generate_salt()
@@ -191,6 +201,9 @@ def unlock_vault(
 ):
     """
     Desbloquea la boveda.
+
+    Los parametros Argon2id se leen del propio archivo,
+    permitiendo abrir bovedas creadas con perfiles antiguos.
 
     Devuelve:
         vault_data
@@ -281,7 +294,7 @@ def save_vault_with_session(
     Guarda cambios usando la clave derivada que
     ya existe mientras VaultGit esta desbloqueado.
 
-    No necesita conservar la contraseña maestra.
+    Conserva los parametros KDF de esa misma boveda.
     """
 
     vault_file = build_vault_file(
@@ -307,8 +320,8 @@ def save_vault(
     Guarda una boveda usando nuevamente
     la contraseña maestra.
 
-    Esta funcion sigue siendo utilizada por
-    nuestra version de terminal.
+    Esta funcion crea un nuevo salt y usa
+    el perfil KDF por defecto actual.
     """
 
     create_vault(
