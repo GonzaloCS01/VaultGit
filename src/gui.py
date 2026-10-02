@@ -1,7 +1,6 @@
 import binascii
 import copy
 import tkinter as tk
-from pathlib import Path
 from tkinter import messagebox, simpledialog, ttk
 
 from nacl.exceptions import CryptoError
@@ -17,6 +16,7 @@ from accounts import (
 
 from generator import generate_password
 from password_policy import validate_master_password
+from paths import BACKUP_DIR, VAULT_PATH
 
 from backup import (
     create_backup,
@@ -33,10 +33,6 @@ from vault import (
     unlock_vault,
 )
 
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-VAULT_PATH = PROJECT_ROOT / "data" / "vault.vault"
-BACKUP_DIR = PROJECT_ROOT / "data" / "backups"
 
 
 class VaultGitGUI(tk.Tk):

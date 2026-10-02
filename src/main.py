@@ -1,5 +1,4 @@
 from getpass import getpass
-from pathlib import Path
 
 from nacl.exceptions import CryptoError
 
@@ -12,15 +11,13 @@ from accounts import (
 )
 
 from generator import generate_password
+from paths import VAULT_PATH
 
 from vault import (
     create_vault,
     load_vault,
     save_vault,
 )
-
-
-VAULT_PATH = Path("data/vault.vault")
 
 
 def create_new_vault():
@@ -136,7 +133,6 @@ def show_account_details(vault_data):
         return
 
     print()
-
     print(
         "Servicio:",
         account.get("service", ""),
@@ -439,6 +435,11 @@ def main():
     print()
     print("VaultGit")
     print("========")
+    print(
+        "Boveda:",
+        VAULT_PATH,
+    )
+    print()
 
     if VAULT_PATH.exists():
         master_password, vault_data = (
