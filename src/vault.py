@@ -126,6 +126,66 @@ def validate_vault_file(vault_file):
         )
 
 
+def read_vault_file(path):
+    """
+    Lee y valida la estructura externa de una boveda.
+    No descifra credenciales.
+    """
+
+    path = Path(path)
+
+    vault_file = json.loads(
+        path.read_text(
+            encoding="utf-8"
+        )
+    )
+
+    validate_vault_file(
+        vault_file
+    )
+
+    return vault_file
+
+
+def get_vault_kdf_profile(path):
+    """
+    Devuelve los parametros Argon2id almacenados
+    dentro de una boveda sin descifrarla.
+    """
+
+    vault_file = read_vault_file(
+        path
+    )
+
+    kdf = vault_file["kdf"]
+
+    return {
+        "name": kdf["name"],
+        "opslimit": int(
+            kdf["opslimit"]
+        ),
+        "memlimit": int(
+            kdf["memlimit"]
+        ),
+    }
+
+
+def needs_kdf_upgrade(path):
+    """
+    Indica si la boveda usa parametros inferiores
+    al perfil por defecto actual de VaultGit.
+    """
+
+    profile = get_vault_kdf_profile(
+        path
+    )
+
+    return (
+        profile["opslimit"] < KDF_OPSLIMIT
+        or profile["memlimit"] < KDF_MEMLIMIT
+    )
+
+
 def build_vault_file(
     vault_data,
     key,
@@ -210,16 +270,8 @@ def unlock_vault(
         session
     """
 
-    path = Path(path)
-
-    vault_file = json.loads(
-        path.read_text(
-            encoding="utf-8"
-        )
-    )
-
-    validate_vault_file(
-        vault_file
+    vault_file = read_vault_file(
+        path
     )
 
     kdf = vault_file["kdf"]
@@ -329,3 +381,84 @@ def save_vault(
         master_password,
         vault_data,
     )
+
+
+def migrate_vault_kdf(
+    path,
+    master_password,
+):
+    """
+    Migra una boveda existente al perfil KDF
+    por defecto actual.
+
+    Flujo:
+    1. Desbloquea con los parametros antiguos.
+    2. Genera un salt nuevo.
+    3. Deriva una clave nueva con el perfil actual.
+    4. Vuelve a cifrar toda la boveda.
+    5. Verifica que la boveda migrada pueda abrirse.
+
+    Devuelve:
+        vault_data
+        session
+    """
+
+    path = Path(path)
+
+    original_bytes = path.read_bytes()
+
+    # La contraseña se valida ANTES de modificar
+    # cualquier byte del archivo.
+    vault_data, _old_session = unlock_vault(
+        path,
+        master_password,
+    )
+
+    new_salt = generate_salt()
+
+    new_key = derive_key(
+        master_password,
+        new_salt,
+        opslimit=KDF_OPSLIMIT,
+        memlimit=KDF_MEMLIMIT,
+    )
+
+    migrated_file = build_vault_file(
+        vault_data,
+        new_key,
+        new_salt,
+        KDF_OPSLIMIT,
+        KDF_MEMLIMIT,
+    )
+
+    try:
+        write_vault_file(
+            path,
+            migrated_file,
+        )
+
+        # Verificacion posterior a la escritura.
+        reopened_data, session = unlock_vault(
+            path,
+            master_password,
+        )
+
+    except Exception:
+        # Si algo falla durante la migracion/verificacion,
+        # intentamos devolver el archivo a su estado exacto anterior.
+        temporary_path = path.with_suffix(
+            path.suffix + ".rollback.tmp"
+        )
+
+        temporary_path.write_bytes(
+            original_bytes
+        )
+
+        os.replace(
+            temporary_path,
+            path,
+        )
+
+        raise
+
+    return reopened_data, session
