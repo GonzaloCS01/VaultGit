@@ -59,3 +59,68 @@ def search_accounts(vault_data, query):
             results.append(account)
 
     return results
+
+def get_account_by_id(vault_data, account_id):
+    """
+    Busca una cuenta por su identificador unico.
+    """
+
+    for account in get_accounts(vault_data):
+        if account.get("id") == account_id:
+            return account
+
+    return None
+
+
+def update_account(
+    vault_data,
+    account_id,
+    service=None,
+    username=None,
+    password=None,
+    url=None,
+    notes=None,
+):
+    """
+    Actualiza una cuenta existente.
+    """
+
+    account = get_account_by_id(
+        vault_data,
+        account_id,
+    )
+
+    if account is None:
+        return False
+
+    if service is not None:
+        account["service"] = service.strip()
+
+    if username is not None:
+        account["username"] = username.strip()
+
+    if password is not None:
+        account["password"] = password
+
+    if url is not None:
+        account["url"] = url.strip()
+
+    if notes is not None:
+        account["notes"] = notes.strip()
+
+    return True
+
+
+def delete_account(vault_data, account_id):
+    """
+    Elimina una cuenta de la boveda.
+    """
+
+    accounts = get_accounts(vault_data)
+
+    for account in accounts:
+        if account.get("id") == account_id:
+            accounts.remove(account)
+            return True
+
+    return False

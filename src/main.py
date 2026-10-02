@@ -5,8 +5,10 @@ from nacl.exceptions import CryptoError
 
 from accounts import (
     add_account,
+    delete_account,
     get_accounts,
     search_accounts,
+    update_account,
 )
 
 from vault import (
@@ -95,6 +97,69 @@ def show_accounts(vault_data):
         )
 
 
+def select_account(vault_data):
+    accounts = get_accounts(vault_data)
+
+    if not accounts:
+        print("No hay cuentas almacenadas.")
+        return None
+
+    show_accounts(vault_data)
+
+    choice = input(
+        "Selecciona el numero de cuenta: "
+    ).strip()
+
+    if not choice.isdigit():
+        print("Seleccion no valida.")
+        return None
+
+    index = int(choice) - 1
+
+    if index < 0 or index >= len(accounts):
+        print("Cuenta no valida.")
+        return None
+
+    return accounts[index]
+
+
+def show_account_details(vault_data):
+    print()
+    print("DETALLES DE CUENTA")
+    print("==================")
+
+    account = select_account(vault_data)
+
+    if account is None:
+        return
+
+    print()
+    print(
+        "Servicio:",
+        account.get("service", ""),
+    )
+
+    print(
+        "Usuario:",
+        account.get("username", ""),
+    )
+
+    print(
+        "Contraseña:",
+        "************",
+    )
+
+    print(
+        "URL:",
+        account.get("url", "") or "Sin URL",
+    )
+
+    print(
+        "Notas:",
+        account.get("notes", "") or "Sin notas",
+    )
+
+
 def create_account(
     vault_data,
     master_password,
@@ -145,6 +210,105 @@ def create_account(
     print("Cuenta guardada correctamente.")
 
 
+def edit_account(
+    vault_data,
+    master_password,
+):
+    print()
+    print("EDITAR CUENTA")
+    print("=============")
+
+    account = select_account(vault_data)
+
+    if account is None:
+        return
+
+    print()
+    print(
+        "Deja un campo vacio para conservar su valor."
+    )
+
+    service = input(
+        f"Servicio [{account.get('service', '')}]: "
+    ).strip()
+
+    username = input(
+        f"Usuario [{account.get('username', '')}]: "
+    ).strip()
+
+    new_password = getpass(
+        "Nueva contraseña "
+        "(Enter para conservar la actual): "
+    )
+
+    url = input(
+        f"URL [{account.get('url', '')}]: "
+    ).strip()
+
+    notes = input(
+        f"Notas [{account.get('notes', '')}]: "
+    ).strip()
+
+    update_account(
+        vault_data,
+        account["id"],
+        service=service if service else None,
+        username=username if username else None,
+        password=new_password if new_password else None,
+        url=url if url else None,
+        notes=notes if notes else None,
+    )
+
+    save_vault(
+        VAULT_PATH,
+        master_password,
+        vault_data,
+    )
+
+    print("Cuenta actualizada correctamente.")
+
+
+def remove_account(
+    vault_data,
+    master_password,
+):
+    print()
+    print("ELIMINAR CUENTA")
+    print("===============")
+
+    account = select_account(vault_data)
+
+    if account is None:
+        return
+
+    print()
+    print(
+        "Vas a eliminar:",
+        account.get("service", ""),
+    )
+
+    confirmation = input(
+        "Escribe ELIMINAR para confirmar: "
+    ).strip()
+
+    if confirmation != "ELIMINAR":
+        print("Eliminacion cancelada.")
+        return
+
+    delete_account(
+        vault_data,
+        account["id"],
+    )
+
+    save_vault(
+        VAULT_PATH,
+        master_password,
+        vault_data,
+    )
+
+    print("Cuenta eliminada correctamente.")
+
+
 def search_account(vault_data):
     query = input(
         "Buscar: "
@@ -183,7 +347,10 @@ def vault_menu(
         print("[1] Ver cuentas")
         print("[2] Añadir cuenta")
         print("[3] Buscar cuenta")
-        print("[4] Bloquear y salir")
+        print("[4] Ver detalles")
+        print("[5] Editar cuenta")
+        print("[6] Eliminar cuenta")
+        print("[7] Bloquear y salir")
         print()
 
         option = input(
@@ -203,6 +370,21 @@ def vault_menu(
             search_account(vault_data)
 
         elif option == "4":
+            show_account_details(vault_data)
+
+        elif option == "5":
+            edit_account(
+                vault_data,
+                master_password,
+            )
+
+        elif option == "6":
+            remove_account(
+                vault_data,
+                master_password,
+            )
+
+        elif option == "7":
             print("VaultGit bloqueado.")
             break
 
