@@ -16,6 +16,7 @@ from accounts import (
 )
 
 from generator import generate_password
+from password_policy import validate_master_password
 
 from backup import (
     create_backup,
@@ -560,14 +561,14 @@ class VaultGitGUI(tk.Tk):
                 )
                 return
 
-            if len(password) < 12:
+            password_is_valid, password_error = (
+                validate_master_password(password)
+            )
+
+            if not password_is_valid:
                 messagebox.showwarning(
                     "VaultGit",
-                    (
-                        "Utiliza una contraseña "
-                        "maestra de al menos "
-                        "12 caracteres."
-                    ),
+                    password_error,
                 )
                 return
 
