@@ -15,6 +15,7 @@ from accounts import (
 )
 
 from generator import generate_password
+from auth_guard import UnlockThrottle
 from password_policy import validate_master_password
 from paths import BACKUP_DIR, VAULT_PATH
 
@@ -62,6 +63,12 @@ class VaultGitGUI(tk.Tk):
         self.clipboard_after_id = None
         self.clipboard_secret = None
         self.clipboard_timeout_seconds = 30
+
+        # Control de intentos de desbloqueo.
+        self.unlock_throttle = UnlockThrottle()
+        self.unlock_countdown_after_id = None
+        self.unlock_button = None
+        self.unlock_status_label = None
 
         self.setup_styles()
 
@@ -634,6 +641,7 @@ class VaultGitGUI(tk.Tk):
     # =========================================================
 
     def show_unlock_screen(self):
+        self.cancel_unlock_countdown()
         self.clear_window()
 
         self.vault_data = None
@@ -751,12 +759,112 @@ class VaultGitGUI(tk.Tk):
             pady=(0, 20),
         )
 
-        self.create_primary_button(
+        self.unlock_status_label = tk.Label(
+            card,
+            text="",
+            font=(
+                "Segoe UI",
+                9,
+                "bold",
+            ),
+            bg="#1b1f27",
+            fg="#ffb4b4",
+            wraplength=320,
+            justify="center",
+        )
+
+        self.unlock_status_label.pack(
+            pady=(0, 12)
+        )
+
+        self.unlock_button = self.create_primary_button(
             card,
             "Desbloquear bóveda",
             self.unlock_vault_gui,
             width=28,
-        ).pack()
+        )
+
+        self.unlock_button.pack()
+
+        self.update_unlock_throttle_ui()
+
+    def cancel_unlock_countdown(self):
+        """
+        Cancela la actualización visual pendiente
+        del contador de desbloqueo.
+        """
+
+        if self.unlock_countdown_after_id is not None:
+            try:
+                self.after_cancel(
+                    self.unlock_countdown_after_id
+                )
+            except tk.TclError:
+                pass
+
+            self.unlock_countdown_after_id = None
+
+    def update_unlock_throttle_ui(self):
+        """
+        Actualiza la pantalla de desbloqueo sin bloquear
+        el hilo principal de Tkinter.
+        """
+
+        self.unlock_countdown_after_id = None
+
+        if (
+            self.password_entry is None
+            or self.unlock_button is None
+            or self.unlock_status_label is None
+        ):
+            return
+
+        try:
+            if not self.password_entry.winfo_exists():
+                return
+        except tk.TclError:
+            return
+
+        remaining = (
+            self.unlock_throttle.remaining_seconds()
+        )
+
+        if remaining > 0:
+            self.password_entry.config(
+                state="disabled"
+            )
+
+            self.unlock_button.config(
+                state="disabled"
+            )
+
+            self.unlock_status_label.config(
+                text=(
+                    "Contraseña incorrecta o bóveda manipulada. "
+                    f"Espera {remaining} "
+                    f"{'segundo' if remaining == 1 else 'segundos'} "
+                    "antes de volver a intentarlo."
+                )
+            )
+
+            self.unlock_countdown_after_id = self.after(
+                250,
+                self.update_unlock_throttle_ui,
+            )
+
+            return
+
+        self.password_entry.config(
+            state="normal"
+        )
+
+        self.unlock_button.config(
+            state="normal"
+        )
+
+        self.unlock_status_label.config(
+            text=""
+        )
 
         self.password_entry.focus_set()
 
@@ -770,6 +878,11 @@ class VaultGitGUI(tk.Tk):
         )
 
     def unlock_vault_gui(self):
+        # Si existe una espera activa, no ejecutamos
+        # otra derivación Argon2id todavía.
+        if not self.unlock_throttle.can_attempt():
+            return
+
         password = self.password_var.get()
 
         if not password:
@@ -788,15 +901,9 @@ class VaultGitGUI(tk.Tk):
         except CryptoError:
             self.password_var.set("")
 
-            messagebox.showerror(
-                "VaultGit",
-                (
-                    "Contraseña incorrecta o "
-                    "bóveda manipulada."
-                ),
-            )
+            self.unlock_throttle.record_failure()
 
-            self.password_entry.focus_set()
+            self.update_unlock_throttle_ui()
             return
 
         except (
@@ -816,6 +923,9 @@ class VaultGitGUI(tk.Tk):
                 ),
             )
             return
+
+        self.unlock_throttle.record_success()
+        self.cancel_unlock_countdown()
 
         self.password_var.set("")
 
@@ -2966,10 +3076,14 @@ class VaultGitGUI(tk.Tk):
         self.search_var = None
         self.accounts_table = None
         self.count_label = None
+        self.unlock_button = None
+        self.unlock_status_label = None
 
         self.show_unlock_screen()
 
     def on_close(self):
+        self.cancel_unlock_countdown()
+
         if self.auto_lock_after_id is not None:
             try:
                 self.after_cancel(
