@@ -11,6 +11,8 @@ from accounts import (
     update_account,
 )
 
+from generator import generate_password
+
 from vault import (
     create_vault,
     load_vault,
@@ -134,6 +136,7 @@ def show_account_details(vault_data):
         return
 
     print()
+
     print(
         "Servicio:",
         account.get("service", ""),
@@ -336,6 +339,42 @@ def search_account(vault_data):
         )
 
 
+def password_generator_menu():
+    print()
+    print("GENERADOR DE CONTRASEÑAS")
+    print("========================")
+
+    length_input = input(
+        "Longitud [20]: "
+    ).strip()
+
+    if length_input:
+        if not length_input.isdigit():
+            print("Longitud no valida.")
+            return
+
+        length = int(length_input)
+
+    else:
+        length = 20
+
+    try:
+        password = generate_password(
+            length=length,
+        )
+
+    except ValueError as error:
+        print(
+            "No se pudo generar:",
+            error,
+        )
+        return
+
+    print()
+    print("Contraseña generada:")
+    print(password)
+
+
 def vault_menu(
     master_password,
     vault_data,
@@ -350,7 +389,8 @@ def vault_menu(
         print("[4] Ver detalles")
         print("[5] Editar cuenta")
         print("[6] Eliminar cuenta")
-        print("[7] Bloquear y salir")
+        print("[7] Generar contraseña")
+        print("[8] Bloquear y salir")
         print()
 
         option = input(
@@ -385,6 +425,9 @@ def vault_menu(
             )
 
         elif option == "7":
+            password_generator_menu()
+
+        elif option == "8":
             print("VaultGit bloqueado.")
             break
 
