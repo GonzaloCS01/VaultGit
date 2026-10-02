@@ -2,7 +2,7 @@ import binascii
 import copy
 import tkinter as tk
 from pathlib import Path
-from tkinter import messagebox, ttk
+from tkinter import messagebox, simpledialog, ttk
 
 from nacl.exceptions import CryptoError
 
@@ -17,6 +17,12 @@ from accounts import (
 
 from generator import generate_password
 
+from backup import (
+    create_backup,
+    list_backups,
+    restore_backup,
+)
+
 from vault import (
     create_vault,
     save_vault_with_session,
@@ -26,6 +32,7 @@ from vault import (
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 VAULT_PATH = PROJECT_ROOT / "data" / "vault.vault"
+BACKUP_DIR = PROJECT_ROOT / "data" / "backups"
 
 
 class VaultGitGUI(tk.Tk):
@@ -933,6 +940,15 @@ class VaultGitGUI(tk.Tk):
             self.open_password_generator,
         ).pack(
             side="right",
+        )
+
+        self.create_secondary_button(
+            header,
+            "Backups",
+            self.open_backups_window,
+        ).pack(
+            side="right",
+            padx=(0, 10),
         )
 
         search_frame = tk.Frame(
@@ -1866,6 +1882,14 @@ class VaultGitGUI(tk.Tk):
                 )
 
             try:
+                # Creamos una copia cifrada del estado actual
+                # antes de modificar la bóveda.
+                create_backup(
+                    VAULT_PATH,
+                    BACKUP_DIR,
+                    keep=10,
+                )
+
                 save_vault_with_session(
                     VAULT_PATH,
                     self.session,
@@ -1996,6 +2020,14 @@ class VaultGitGUI(tk.Tk):
             return
 
         try:
+            # Creamos una copia cifrada del estado actual
+            # antes de eliminar la cuenta.
+            create_backup(
+                VAULT_PATH,
+                BACKUP_DIR,
+                keep=10,
+            )
+
             save_vault_with_session(
                 VAULT_PATH,
                 self.session,
@@ -2020,6 +2052,323 @@ class VaultGitGUI(tk.Tk):
         self.vault_data = candidate_data
 
         self.refresh_accounts()
+
+    # =========================================================
+    # BACKUPS CIFRADOS
+    # =========================================================
+
+    def open_backups_window(self):
+        window = tk.Toplevel(
+            self
+        )
+
+        window.title(
+            "Backups cifrados"
+        )
+
+        window.geometry(
+            "700x480"
+        )
+
+        window.minsize(
+            620,
+            420,
+        )
+
+        window.configure(
+            bg="#181b21"
+        )
+
+        tk.Label(
+            window,
+            text="Backups cifrados",
+            font=(
+                "Segoe UI",
+                18,
+                "bold",
+            ),
+            bg="#181b21",
+            fg="white",
+        ).pack(
+            pady=(24, 5)
+        )
+
+        tk.Label(
+            window,
+            text=(
+                "Cada backup es una copia de la bóveda "
+                "que permanece cifrada."
+            ),
+            font=(
+                "Segoe UI",
+                9,
+            ),
+            bg="#181b21",
+            fg="#9ca3af",
+        ).pack(
+            pady=(0, 18)
+        )
+
+        list_frame = tk.Frame(
+            window,
+            bg="#181b21",
+        )
+
+        list_frame.pack(
+            fill="both",
+            expand=True,
+            padx=28,
+        )
+
+        backups_list = tk.Listbox(
+            list_frame,
+            bg="#22262f",
+            fg="white",
+            selectbackground="#315efb",
+            selectforeground="white",
+            relief="flat",
+            font=(
+                "Consolas",
+                10,
+            ),
+            activestyle="none",
+        )
+
+        scrollbar = ttk.Scrollbar(
+            list_frame,
+            orient="vertical",
+            command=backups_list.yview,
+        )
+
+        backups_list.configure(
+            yscrollcommand=scrollbar.set
+        )
+
+        backups_list.pack(
+            side="left",
+            fill="both",
+            expand=True,
+        )
+
+        scrollbar.pack(
+            side="right",
+            fill="y",
+        )
+
+        backup_paths = []
+
+        def refresh_backup_list():
+            nonlocal backup_paths
+
+            backups_list.delete(
+                0,
+                tk.END,
+            )
+
+            backup_paths = list_backups(
+                BACKUP_DIR
+            )
+
+            for backup_path in backup_paths:
+                backups_list.insert(
+                    tk.END,
+                    backup_path.name,
+                )
+
+            if not backup_paths:
+                backups_list.insert(
+                    tk.END,
+                    "No hay backups disponibles.",
+                )
+
+        def create_manual_backup():
+            try:
+                backup_path = create_backup(
+                    VAULT_PATH,
+                    BACKUP_DIR,
+                    prefix="manual-backup",
+                    keep=None,
+                )
+
+            except (
+                OSError,
+                ValueError,
+                FileNotFoundError,
+            ):
+                messagebox.showerror(
+                    "VaultGit",
+                    "No se pudo crear el backup.",
+                    parent=window,
+                )
+                return
+
+            refresh_backup_list()
+
+            messagebox.showinfo(
+                "VaultGit",
+                (
+                    "Backup cifrado creado:\n\n"
+                    f"{backup_path.name}"
+                ),
+                parent=window,
+            )
+
+        def restore_selected_backup():
+            selection = backups_list.curselection()
+
+            if not selection:
+                messagebox.showinfo(
+                    "VaultGit",
+                    "Selecciona un backup primero.",
+                    parent=window,
+                )
+                return
+
+            index = selection[0]
+
+            if index >= len(backup_paths):
+                return
+
+            backup_path = backup_paths[index]
+
+            confirmed = messagebox.askyesno(
+                "Restaurar backup",
+                (
+                    "VaultGit reemplazará la bóveda actual "
+                    "por el backup seleccionado.\n\n"
+                    "Antes de hacerlo creará una copia "
+                    "pre-restauración del estado actual.\n\n"
+                    "¿Quieres continuar?"
+                ),
+                parent=window,
+            )
+
+            if not confirmed:
+                return
+
+            password = simpledialog.askstring(
+                "Contraseña maestra",
+                (
+                    "Introduce la contraseña maestra "
+                    "correspondiente a este backup:"
+                ),
+                show="●",
+                parent=window,
+            )
+
+            if password is None:
+                return
+
+            if not password:
+                messagebox.showwarning(
+                    "VaultGit",
+                    "Introduce una contraseña maestra.",
+                    parent=window,
+                )
+                return
+
+            try:
+                (
+                    restored_data,
+                    restored_session,
+                    safety_backup,
+                ) = restore_backup(
+                    backup_path,
+                    VAULT_PATH,
+                    password,
+                    BACKUP_DIR,
+                )
+
+            except CryptoError:
+                messagebox.showerror(
+                    "VaultGit",
+                    (
+                        "Contraseña incorrecta "
+                        "o backup manipulado."
+                    ),
+                    parent=window,
+                )
+                return
+
+            except (
+                OSError,
+                ValueError,
+                KeyError,
+                TypeError,
+                binascii.Error,
+            ):
+                messagebox.showerror(
+                    "VaultGit",
+                    (
+                        "No se pudo restaurar "
+                        "el backup seleccionado."
+                    ),
+                    parent=window,
+                )
+                return
+
+            password = None
+
+            self.vault_data = restored_data
+            self.session = restored_session
+
+            window.destroy()
+
+            self.show_dashboard()
+
+            if safety_backup is not None:
+                messagebox.showinfo(
+                    "VaultGit",
+                    (
+                        "Backup restaurado correctamente.\n\n"
+                        "También se creó una copia "
+                        "pre-restauración:\n"
+                        f"{safety_backup.name}"
+                    ),
+                )
+            else:
+                messagebox.showinfo(
+                    "VaultGit",
+                    "Backup restaurado correctamente.",
+                )
+
+        buttons = tk.Frame(
+            window,
+            bg="#181b21",
+        )
+
+        buttons.pack(
+            fill="x",
+            padx=28,
+            pady=20,
+        )
+
+        self.create_primary_button(
+            buttons,
+            "Crear backup ahora",
+            create_manual_backup,
+        ).pack(
+            side="left",
+        )
+
+        self.create_secondary_button(
+            buttons,
+            "Restaurar seleccionado",
+            restore_selected_backup,
+        ).pack(
+            side="left",
+            padx=10,
+        )
+
+        self.create_secondary_button(
+            buttons,
+            "Cerrar",
+            window.destroy,
+        ).pack(
+            side="right",
+        )
+
+        refresh_backup_list()
 
     # =========================================================
     # GENERADOR
