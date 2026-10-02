@@ -49,10 +49,12 @@ class VaultGitGUI(tk.Tk):
 
         # Bloqueo automático.
         self.auto_lock_after_id = None
+        self.auto_lock_minutes = 5
 
-        # 5 minutos en uso normal.
-        # Para probar temporalmente puedes usar 0.1.
-        self.auto_lock_minutes = 10
+        # Portapapeles temporal.
+        self.clipboard_after_id = None
+        self.clipboard_secret = None
+        self.clipboard_timeout_seconds = 30
 
         self.setup_styles()
 
@@ -182,6 +184,121 @@ class VaultGitGUI(tk.Tk):
                 "automáticamente por inactividad."
             ),
         )
+
+    # =========================================================
+    # PORTAPAPELES TEMPORAL
+    # =========================================================
+
+    def cancel_clipboard_timer(self):
+        """
+        Cancela el temporizador pendiente del portapapeles.
+        """
+
+        if self.clipboard_after_id is not None:
+            try:
+                self.after_cancel(
+                    self.clipboard_after_id
+                )
+            except tk.TclError:
+                pass
+
+            self.clipboard_after_id = None
+
+    def copy_sensitive_to_clipboard(self, value):
+        """
+        Copia un secreto al portapapeles y programa
+        su limpieza automática.
+        """
+
+        if not value:
+            messagebox.showwarning(
+                "VaultGit",
+                "No hay una contraseña para copiar.",
+            )
+            return
+
+        self.cancel_clipboard_timer()
+
+        try:
+            self.clipboard_clear()
+            self.clipboard_append(value)
+
+            # Fuerza a Windows/Tk a publicar el contenido.
+            self.update()
+
+        except tk.TclError:
+            messagebox.showerror(
+                "VaultGit",
+                "No se pudo acceder al portapapeles.",
+            )
+            return
+
+        self.clipboard_secret = value
+
+        self.clipboard_after_id = self.after(
+            self.clipboard_timeout_seconds * 1000,
+            self.clear_clipboard_due_to_timeout,
+        )
+
+        messagebox.showinfo(
+            "VaultGit",
+            (
+                "Contraseña copiada.\n\n"
+                "VaultGit intentará retirarla del "
+                "portapapeles en 30 segundos."
+            ),
+        )
+
+    def clear_clipboard_due_to_timeout(self):
+        """
+        Intenta limpiar el secreto al vencer el tiempo.
+        """
+
+        self.clipboard_after_id = None
+
+        self.clear_sensitive_clipboard(
+            cancel_timer=False
+        )
+
+    def clear_sensitive_clipboard(
+        self,
+        cancel_timer=True,
+    ):
+        """
+        Limpia el portapapeles únicamente si todavía
+        contiene exactamente el secreto que VaultGit copió.
+
+        Si el usuario copió otra cosa después, VaultGit
+        no modifica ese nuevo contenido.
+        """
+
+        if cancel_timer:
+            self.cancel_clipboard_timer()
+
+        tracked_secret = self.clipboard_secret
+
+        # Dejamos de conservar nuestra referencia al secreto
+        # independientemente del estado actual del portapapeles.
+        self.clipboard_secret = None
+
+        if tracked_secret is None:
+            return False
+
+        try:
+            current_value = self.clipboard_get()
+        except tk.TclError:
+            return False
+
+        if current_value != tracked_secret:
+            return False
+
+        try:
+            self.clipboard_clear()
+            self.update()
+        except tk.TclError:
+            return False
+
+        return True
 
     # =========================================================
     # UTILIDADES GENERALES
@@ -1102,7 +1219,7 @@ class VaultGitGUI(tk.Tk):
         )
 
         window.geometry(
-            "520x460"
+            "560x480"
         )
 
         window.resizable(
@@ -1251,6 +1368,35 @@ class VaultGitGUI(tk.Tk):
 
         show_button.pack(
             side="right"
+        )
+
+        copy_button = tk.Button(
+            password_frame,
+            text="Copiar",
+            command=lambda: self.copy_sensitive_to_clipboard(
+                account.get(
+                    "password",
+                    "",
+                )
+            ),
+            font=(
+                "Segoe UI",
+                8,
+                "bold",
+            ),
+            bg="#303641",
+            fg="white",
+            activebackground="#414956",
+            activeforeground="white",
+            relief="flat",
+            cursor="hand2",
+            padx=10,
+            pady=4,
+        )
+
+        copy_button.pack(
+            side="right",
+            padx=(0, 6),
         )
 
         self.detail_row(
@@ -1889,7 +2035,7 @@ class VaultGitGUI(tk.Tk):
         )
 
         window.geometry(
-            "460x300"
+            "480x330"
         )
 
         window.resizable(
@@ -1999,11 +2145,48 @@ class VaultGitGUI(tk.Tk):
                 password
             )
 
-        self.create_primary_button(
+        button_row = tk.Frame(
             window,
+            bg="#181b21",
+        )
+
+        button_row.pack()
+
+        self.create_primary_button(
+            button_row,
             "Generar",
             generate,
-        ).pack()
+        ).pack(
+            side="left",
+            padx=5,
+        )
+
+        self.create_secondary_button(
+            button_row,
+            "Copiar",
+            lambda: self.copy_sensitive_to_clipboard(
+                password_var.get()
+            ),
+        ).pack(
+            side="left",
+            padx=5,
+        )
+
+        tk.Label(
+            window,
+            text=(
+                "Las contraseñas copiadas se intentan "
+                "retirar del portapapeles tras 30 segundos."
+            ),
+            bg="#181b21",
+            fg="#9ca3af",
+            font=(
+                "Segoe UI",
+                8,
+            ),
+        ).pack(
+            pady=(18, 0)
+        )
 
     # =========================================================
     # BLOQUEO Y CIERRE
@@ -2019,6 +2202,10 @@ class VaultGitGUI(tk.Tk):
                 pass
 
             self.auto_lock_after_id = None
+
+        # Si el portapapeles todavía contiene una contraseña
+        # copiada por VaultGit, la retiramos al bloquear.
+        self.clear_sensitive_clipboard()
 
         self.vault_data = None
         self.session = None
@@ -2038,6 +2225,9 @@ class VaultGitGUI(tk.Tk):
                 pass
 
             self.auto_lock_after_id = None
+
+        # Misma protección al cerrar completamente la app.
+        self.clear_sensitive_clipboard()
 
         self.vault_data = None
         self.session = None
