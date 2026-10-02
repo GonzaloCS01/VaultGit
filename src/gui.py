@@ -35,16 +35,24 @@ class VaultGitGUI(tk.Tk):
         self.title("VaultGit")
         self.geometry("1000x620")
         self.minsize(900, 560)
+        self.configure(bg="#111318")
 
-        self.configure(
-            bg="#111318"
-        )
-
+        # Datos sensibles disponibles solamente
+        # mientras la bóveda permanece desbloqueada.
         self.vault_data = None
         self.session = None
 
+        # Elementos de interfaz.
         self.search_var = None
         self.accounts_table = None
+        self.count_label = None
+
+        # Bloqueo automático.
+        self.auto_lock_after_id = None
+
+        # 5 minutos en uso normal.
+        # Para probar temporalmente puedes usar 0.1.
+        self.auto_lock_minutes = 10
 
         self.setup_styles()
 
@@ -93,6 +101,86 @@ class VaultGitGUI(tk.Tk):
             foreground=[
                 ("selected", "white")
             ],
+        )
+
+    # =========================================================
+    # BLOQUEO AUTOMÁTICO
+    # =========================================================
+
+    def start_inactivity_monitor(self):
+        """
+        Empieza a observar actividad de teclado y ratón.
+        """
+
+        self.bind_all(
+            "<Any-KeyPress>",
+            self.register_activity,
+        )
+
+        self.bind_all(
+            "<Any-Button>",
+            self.register_activity,
+        )
+
+        self.reset_auto_lock_timer()
+
+    def register_activity(self, event=None):
+        """
+        Cada interacción reinicia el contador.
+        """
+
+        if (
+            self.vault_data is not None
+            and self.session is not None
+        ):
+            self.reset_auto_lock_timer()
+
+    def reset_auto_lock_timer(self):
+        """
+        Reinicia el temporizador de bloqueo.
+        """
+
+        if self.auto_lock_after_id is not None:
+            try:
+                self.after_cancel(
+                    self.auto_lock_after_id
+                )
+            except tk.TclError:
+                pass
+
+        milliseconds = int(
+            self.auto_lock_minutes
+            * 60
+            * 1000
+        )
+
+        self.auto_lock_after_id = self.after(
+            milliseconds,
+            self.auto_lock_due_to_inactivity,
+        )
+
+    def auto_lock_due_to_inactivity(self):
+        """
+        Bloquea VaultGit cuando se alcanza
+        el tiempo máximo sin actividad.
+        """
+
+        self.auto_lock_after_id = None
+
+        if (
+            self.vault_data is None
+            or self.session is None
+        ):
+            return
+
+        self.lock_vault()
+
+        messagebox.showinfo(
+            "VaultGit",
+            (
+                "La bóveda se bloqueó "
+                "automáticamente por inactividad."
+            ),
         )
 
     # =========================================================
@@ -156,7 +244,7 @@ class VaultGitGUI(tk.Tk):
         )
 
     # =========================================================
-    # CREAR BOVEDA
+    # CREAR BÓVEDA
     # =========================================================
 
     def show_create_vault_screen(self):
@@ -324,8 +412,8 @@ class VaultGitGUI(tk.Tk):
         tk.Label(
             card,
             text=(
-                "Recomendado: utiliza una frase maestra "
-                "larga y única."
+                "Utiliza una frase maestra "
+                "larga, única y difícil de adivinar."
             ),
             bg="#1b1f27",
             fg="#9ca3af",
@@ -352,8 +440,8 @@ class VaultGitGUI(tk.Tk):
                 messagebox.showwarning(
                     "VaultGit",
                     (
-                        "Para esta versión, utiliza una "
-                        "contraseña maestra de al menos "
+                        "Utiliza una contraseña "
+                        "maestra de al menos "
                         "12 caracteres."
                     ),
                 )
@@ -393,10 +481,7 @@ class VaultGitGUI(tk.Tk):
             ):
                 messagebox.showerror(
                     "VaultGit",
-                    (
-                        "No se pudo crear "
-                        "la bóveda."
-                    ),
+                    "No se pudo crear la bóveda.",
                 )
                 return
 
@@ -623,6 +708,8 @@ class VaultGitGUI(tk.Tk):
 
     def show_dashboard(self):
         self.clear_window()
+
+        self.start_inactivity_monitor()
 
         top_bar = tk.Frame(
             self,
@@ -906,7 +993,7 @@ class VaultGitGUI(tk.Tk):
         self.refresh_accounts()
 
     # =========================================================
-    # LISTADO Y BUSQUEDA
+    # LISTADO Y BÚSQUEDA
     # =========================================================
 
     def refresh_accounts(self):
@@ -963,9 +1050,10 @@ class VaultGitGUI(tk.Tk):
             )
         )
 
-        self.count_label.config(
-            text=f"{total} almacenadas"
-        )
+        if self.count_label is not None:
+            self.count_label.config(
+                text=f"{total} almacenadas"
+            )
 
     def get_selected_account(self):
         selection = (
@@ -1096,7 +1184,7 @@ class VaultGitGUI(tk.Tk):
             value="●●●●●●●●●●●●"
         )
 
-        password_label = tk.Label(
+        tk.Label(
             password_frame,
             textvariable=hidden_password,
             anchor="w",
@@ -1106,9 +1194,7 @@ class VaultGitGUI(tk.Tk):
                 "Consolas",
                 10,
             ),
-        )
-
-        password_label.pack(
+        ).pack(
             side="left",
             fill="x",
             expand=True,
@@ -1355,7 +1441,7 @@ class VaultGitGUI(tk.Tk):
 
         self.form_label(
             form,
-            "Servicio"
+            "Servicio",
         )
 
         service_entry = self.form_entry(
@@ -1365,7 +1451,7 @@ class VaultGitGUI(tk.Tk):
 
         self.form_label(
             form,
-            "Usuario / correo"
+            "Usuario / correo",
         )
 
         self.form_entry(
@@ -1421,11 +1507,11 @@ class VaultGitGUI(tk.Tk):
         }
 
         def toggle_password():
-            show_password_state["visible"] = (
-                not show_password_state[
-                    "visible"
-                ]
-            )
+            show_password_state[
+                "visible"
+            ] = not show_password_state[
+                "visible"
+            ]
 
             password_entry.config(
                 show=(
@@ -1486,7 +1572,7 @@ class VaultGitGUI(tk.Tk):
 
         self.form_label(
             form,
-            "URL"
+            "URL",
         )
 
         self.form_entry(
@@ -1496,7 +1582,7 @@ class VaultGitGUI(tk.Tk):
 
         self.form_label(
             form,
-            "Notas"
+            "Notas",
         )
 
         notes_text = tk.Text(
@@ -1656,9 +1742,7 @@ class VaultGitGUI(tk.Tk):
                 )
                 return
 
-            self.vault_data = (
-                candidate_data
-            )
+            self.vault_data = candidate_data
 
             password_var.set("")
 
@@ -1926,14 +2010,35 @@ class VaultGitGUI(tk.Tk):
     # =========================================================
 
     def lock_vault(self):
+        if self.auto_lock_after_id is not None:
+            try:
+                self.after_cancel(
+                    self.auto_lock_after_id
+                )
+            except tk.TclError:
+                pass
+
+            self.auto_lock_after_id = None
+
         self.vault_data = None
         self.session = None
         self.search_var = None
         self.accounts_table = None
+        self.count_label = None
 
         self.show_unlock_screen()
 
     def on_close(self):
+        if self.auto_lock_after_id is not None:
+            try:
+                self.after_cancel(
+                    self.auto_lock_after_id
+                )
+            except tk.TclError:
+                pass
+
+            self.auto_lock_after_id = None
+
         self.vault_data = None
         self.session = None
 
