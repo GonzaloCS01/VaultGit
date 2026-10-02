@@ -1,12 +1,27 @@
+import binascii
+import copy
 import tkinter as tk
 from pathlib import Path
 from tkinter import messagebox, ttk
 
 from nacl.exceptions import CryptoError
 
-from accounts import get_accounts
+from accounts import (
+    add_account,
+    delete_account,
+    get_account_by_id,
+    get_accounts,
+    search_accounts,
+    update_account,
+)
+
 from generator import generate_password
-from vault import load_vault
+
+from vault import (
+    create_vault,
+    save_vault_with_session,
+    unlock_vault,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -18,17 +33,34 @@ class VaultGitGUI(tk.Tk):
         super().__init__()
 
         self.title("VaultGit")
-        self.geometry("920x560")
-        self.minsize(820, 500)
-
-        self.vault_data = None
+        self.geometry("1000x620")
+        self.minsize(900, 560)
 
         self.configure(
             bg="#111318"
         )
 
+        self.vault_data = None
+        self.session = None
+
+        self.search_var = None
+        self.accounts_table = None
+
         self.setup_styles()
-        self.show_unlock_screen()
+
+        self.protocol(
+            "WM_DELETE_WINDOW",
+            self.on_close,
+        )
+
+        if VAULT_PATH.exists():
+            self.show_unlock_screen()
+        else:
+            self.show_create_vault_screen()
+
+    # =========================================================
+    # ESTILOS
+    # =========================================================
 
     def setup_styles(self):
         style = ttk.Style(self)
@@ -40,7 +72,7 @@ class VaultGitGUI(tk.Tk):
             background="#1b1f27",
             foreground="white",
             fieldbackground="#1b1f27",
-            rowheight=34,
+            rowheight=36,
             borderwidth=0,
             font=("Segoe UI", 10),
         )
@@ -58,16 +90,77 @@ class VaultGitGUI(tk.Tk):
             background=[
                 ("selected", "#315efb")
             ],
+            foreground=[
+                ("selected", "white")
+            ],
         )
+
+    # =========================================================
+    # UTILIDADES GENERALES
+    # =========================================================
 
     def clear_window(self):
         for widget in self.winfo_children():
             widget.destroy()
 
-    def show_unlock_screen(self):
-        self.clear_window()
+    def create_primary_button(
+        self,
+        parent,
+        text,
+        command,
+        width=None,
+    ):
+        return tk.Button(
+            parent,
+            text=text,
+            command=command,
+            width=width,
+            font=(
+                "Segoe UI",
+                10,
+                "bold",
+            ),
+            bg="#315efb",
+            fg="white",
+            activebackground="#2448c7",
+            activeforeground="white",
+            relief="flat",
+            cursor="hand2",
+            padx=18,
+            pady=8,
+        )
 
-        self.vault_data = None
+    def create_secondary_button(
+        self,
+        parent,
+        text,
+        command,
+    ):
+        return tk.Button(
+            parent,
+            text=text,
+            command=command,
+            font=(
+                "Segoe UI",
+                9,
+                "bold",
+            ),
+            bg="#292e38",
+            fg="white",
+            activebackground="#3a404c",
+            activeforeground="white",
+            relief="flat",
+            cursor="hand2",
+            padx=15,
+            pady=7,
+        )
+
+    # =========================================================
+    # CREAR BOVEDA
+    # =========================================================
+
+    def show_create_vault_screen(self):
+        self.clear_window()
 
         container = tk.Frame(
             self,
@@ -80,7 +173,7 @@ class VaultGitGUI(tk.Tk):
             anchor="center",
         )
 
-        title = tk.Label(
+        tk.Label(
             container,
             text="VaultGit",
             font=(
@@ -90,13 +183,279 @@ class VaultGitGUI(tk.Tk):
             ),
             bg="#111318",
             fg="white",
-        )
-
-        title.pack(
+        ).pack(
             pady=(0, 5)
         )
 
-        subtitle = tk.Label(
+        tk.Label(
+            container,
+            text="Crear nueva bóveda cifrada",
+            font=(
+                "Segoe UI",
+                11,
+            ),
+            bg="#111318",
+            fg="#9ca3af",
+        ).pack(
+            pady=(0, 25)
+        )
+
+        card = tk.Frame(
+            container,
+            bg="#1b1f27",
+            padx=35,
+            pady=30,
+        )
+
+        card.pack()
+
+        tk.Label(
+            card,
+            text="Contraseña maestra",
+            bg="#1b1f27",
+            fg="white",
+            font=(
+                "Segoe UI",
+                10,
+                "bold",
+            ),
+        ).pack(
+            anchor="w",
+            pady=(0, 7),
+        )
+
+        password_var = tk.StringVar()
+
+        password_entry = tk.Entry(
+            card,
+            textvariable=password_var,
+            show="●",
+            width=34,
+            font=(
+                "Segoe UI",
+                12,
+            ),
+            bg="#252a34",
+            fg="white",
+            insertbackground="white",
+            relief="flat",
+        )
+
+        password_entry.pack(
+            ipady=8,
+            pady=(0, 15),
+        )
+
+        tk.Label(
+            card,
+            text="Confirmar contraseña",
+            bg="#1b1f27",
+            fg="white",
+            font=(
+                "Segoe UI",
+                10,
+                "bold",
+            ),
+        ).pack(
+            anchor="w",
+            pady=(0, 7),
+        )
+
+        confirmation_var = tk.StringVar()
+
+        confirmation_entry = tk.Entry(
+            card,
+            textvariable=confirmation_var,
+            show="●",
+            width=34,
+            font=(
+                "Segoe UI",
+                12,
+            ),
+            bg="#252a34",
+            fg="white",
+            insertbackground="white",
+            relief="flat",
+        )
+
+        confirmation_entry.pack(
+            ipady=8,
+            pady=(0, 10),
+        )
+
+        show_var = tk.BooleanVar(
+            value=False
+        )
+
+        def toggle_passwords():
+            show_value = (
+                ""
+                if show_var.get()
+                else "●"
+            )
+
+            password_entry.config(
+                show=show_value
+            )
+
+            confirmation_entry.config(
+                show=show_value
+            )
+
+        tk.Checkbutton(
+            card,
+            text="Mostrar contraseñas",
+            variable=show_var,
+            command=toggle_passwords,
+            bg="#1b1f27",
+            fg="#c7cbd4",
+            activebackground="#1b1f27",
+            activeforeground="white",
+            selectcolor="#252a34",
+            font=(
+                "Segoe UI",
+                9,
+            ),
+        ).pack(
+            anchor="w",
+            pady=(0, 15),
+        )
+
+        tk.Label(
+            card,
+            text=(
+                "Recomendado: utiliza una frase maestra "
+                "larga y única."
+            ),
+            bg="#1b1f27",
+            fg="#9ca3af",
+            font=(
+                "Segoe UI",
+                8,
+            ),
+        ).pack(
+            pady=(0, 15),
+        )
+
+        def create_new_vault():
+            password = password_var.get()
+            confirmation = confirmation_var.get()
+
+            if not password:
+                messagebox.showwarning(
+                    "VaultGit",
+                    "Introduce una contraseña maestra.",
+                )
+                return
+
+            if len(password) < 12:
+                messagebox.showwarning(
+                    "VaultGit",
+                    (
+                        "Para esta versión, utiliza una "
+                        "contraseña maestra de al menos "
+                        "12 caracteres."
+                    ),
+                )
+                return
+
+            if password != confirmation:
+                messagebox.showwarning(
+                    "VaultGit",
+                    "Las contraseñas no coinciden.",
+                )
+                return
+
+            initial_data = {
+                "accounts": []
+            }
+
+            try:
+                create_vault(
+                    VAULT_PATH,
+                    password,
+                    initial_data,
+                )
+
+                vault_data, session = (
+                    unlock_vault(
+                        VAULT_PATH,
+                        password,
+                    )
+                )
+
+            except (
+                OSError,
+                ValueError,
+                KeyError,
+                TypeError,
+                binascii.Error,
+            ):
+                messagebox.showerror(
+                    "VaultGit",
+                    (
+                        "No se pudo crear "
+                        "la bóveda."
+                    ),
+                )
+                return
+
+            password_var.set("")
+            confirmation_var.set("")
+
+            self.vault_data = vault_data
+            self.session = session
+
+            password = None
+            confirmation = None
+
+            self.show_dashboard()
+
+        self.create_primary_button(
+            card,
+            "Crear bóveda",
+            create_new_vault,
+            width=28,
+        ).pack()
+
+        password_entry.focus_set()
+
+    # =========================================================
+    # DESBLOQUEO
+    # =========================================================
+
+    def show_unlock_screen(self):
+        self.clear_window()
+
+        self.vault_data = None
+        self.session = None
+
+        container = tk.Frame(
+            self,
+            bg="#111318",
+        )
+
+        container.place(
+            relx=0.5,
+            rely=0.5,
+            anchor="center",
+        )
+
+        tk.Label(
+            container,
+            text="VaultGit",
+            font=(
+                "Segoe UI",
+                30,
+                "bold",
+            ),
+            bg="#111318",
+            fg="white",
+        ).pack(
+            pady=(0, 5)
+        )
+
+        tk.Label(
             container,
             text="Bóveda personal cifrada",
             font=(
@@ -105,9 +464,7 @@ class VaultGitGUI(tk.Tk):
             ),
             bg="#111318",
             fg="#9ca3af",
-        )
-
-        subtitle.pack(
+        ).pack(
             pady=(0, 30)
         )
 
@@ -120,7 +477,7 @@ class VaultGitGUI(tk.Tk):
 
         card.pack()
 
-        password_label = tk.Label(
+        tk.Label(
             card,
             text="Contraseña maestra",
             font=(
@@ -130,9 +487,7 @@ class VaultGitGUI(tk.Tk):
             ),
             bg="#1b1f27",
             fg="white",
-        )
-
-        password_label.pack(
+        ).pack(
             anchor="w",
             pady=(0, 8),
         )
@@ -161,18 +516,18 @@ class VaultGitGUI(tk.Tk):
 
         self.password_entry.bind(
             "<Return>",
-            lambda event: self.unlock_vault(),
+            lambda event: self.unlock_vault_gui(),
         )
 
         self.show_password_var = tk.BooleanVar(
             value=False
         )
 
-        show_password = tk.Checkbutton(
+        tk.Checkbutton(
             card,
             text="Mostrar contraseña",
             variable=self.show_password_var,
-            command=self.toggle_password,
+            command=self.toggle_master_password,
             bg="#1b1f27",
             fg="#c7cbd4",
             activebackground="#1b1f27",
@@ -182,73 +537,30 @@ class VaultGitGUI(tk.Tk):
                 "Segoe UI",
                 9,
             ),
-        )
-
-        show_password.pack(
+        ).pack(
             anchor="w",
             pady=(0, 20),
         )
 
-        unlock_button = tk.Button(
+        self.create_primary_button(
             card,
-            text="Desbloquear bóveda",
-            command=self.unlock_vault,
+            "Desbloquear bóveda",
+            self.unlock_vault_gui,
             width=28,
-            font=(
-                "Segoe UI",
-                10,
-                "bold",
-            ),
-            bg="#315efb",
-            fg="white",
-            activebackground="#2448c7",
-            activeforeground="white",
-            relief="flat",
-            cursor="hand2",
-            pady=8,
-        )
-
-        unlock_button.pack()
-
-        if not VAULT_PATH.exists():
-            warning = tk.Label(
-                container,
-                text=(
-                    "No se encontró una bóveda. "
-                    "Créala primero desde la versión de terminal."
-                ),
-                bg="#111318",
-                fg="#f59e0b",
-                font=(
-                    "Segoe UI",
-                    9,
-                ),
-            )
-
-            warning.pack(
-                pady=(20, 0)
-            )
+        ).pack()
 
         self.password_entry.focus_set()
 
-    def toggle_password(self):
-        if self.show_password_var.get():
-            self.password_entry.config(
-                show=""
+    def toggle_master_password(self):
+        self.password_entry.config(
+            show=(
+                ""
+                if self.show_password_var.get()
+                else "●"
             )
-        else:
-            self.password_entry.config(
-                show="●"
-            )
+        )
 
-    def unlock_vault(self):
-        if not VAULT_PATH.exists():
-            messagebox.showerror(
-                "VaultGit",
-                "No existe una bóveda todavía.",
-            )
-            return
-
+    def unlock_vault_gui(self):
         password = self.password_var.get()
 
         if not password:
@@ -259,7 +571,7 @@ class VaultGitGUI(tk.Tk):
             return
 
         try:
-            vault_data = load_vault(
+            vault_data, session = unlock_vault(
                 VAULT_PATH,
                 password,
             )
@@ -282,6 +594,8 @@ class VaultGitGUI(tk.Tk):
             OSError,
             ValueError,
             KeyError,
+            TypeError,
+            binascii.Error,
         ):
             self.password_var.set("")
 
@@ -297,10 +611,15 @@ class VaultGitGUI(tk.Tk):
         self.password_var.set("")
 
         self.vault_data = vault_data
+        self.session = session
 
         password = None
 
         self.show_dashboard()
+
+    # =========================================================
+    # DASHBOARD
+    # =========================================================
 
     def show_dashboard(self):
         self.clear_window()
@@ -319,7 +638,7 @@ class VaultGitGUI(tk.Tk):
             False
         )
 
-        title = tk.Label(
+        tk.Label(
             top_bar,
             text="🔐 VaultGit",
             font=(
@@ -329,33 +648,16 @@ class VaultGitGUI(tk.Tk):
             ),
             bg="#181b21",
             fg="white",
-        )
-
-        title.pack(
+        ).pack(
             side="left",
             padx=25,
         )
 
-        lock_button = tk.Button(
+        self.create_secondary_button(
             top_bar,
-            text="Bloquear",
-            command=self.lock_vault,
-            font=(
-                "Segoe UI",
-                10,
-                "bold",
-            ),
-            bg="#2b303a",
-            fg="white",
-            activebackground="#3b414d",
-            activeforeground="white",
-            relief="flat",
-            cursor="hand2",
-            padx=18,
-            pady=7,
-        )
-
-        lock_button.pack(
+            "Bloquear",
+            self.lock_vault,
+        ).pack(
             side="right",
             padx=25,
         )
@@ -382,11 +684,7 @@ class VaultGitGUI(tk.Tk):
             pady=(0, 15),
         )
 
-        accounts = get_accounts(
-            self.vault_data
-        )
-
-        accounts_title = tk.Label(
+        tk.Label(
             header,
             text="Mis cuentas",
             font=(
@@ -396,15 +694,13 @@ class VaultGitGUI(tk.Tk):
             ),
             bg="#111318",
             fg="white",
-        )
-
-        accounts_title.pack(
+        ).pack(
             side="left"
         )
 
-        count_label = tk.Label(
+        self.count_label = tk.Label(
             header,
-            text=f"{len(accounts)} almacenadas",
+            text="",
             font=(
                 "Segoe UI",
                 10,
@@ -413,32 +709,77 @@ class VaultGitGUI(tk.Tk):
             fg="#9ca3af",
         )
 
-        count_label.pack(
+        self.count_label.pack(
             side="left",
             padx=12,
         )
 
-        generator_button = tk.Button(
+        self.create_primary_button(
             header,
-            text="Generar contraseña",
-            command=self.open_password_generator,
+            "+ Añadir cuenta",
+            self.open_add_account,
+        ).pack(
+            side="right",
+            padx=(10, 0),
+        )
+
+        self.create_secondary_button(
+            header,
+            "Generar contraseña",
+            self.open_password_generator,
+        ).pack(
+            side="right",
+        )
+
+        search_frame = tk.Frame(
+            body,
+            bg="#111318",
+        )
+
+        search_frame.pack(
+            fill="x",
+            pady=(0, 15),
+        )
+
+        tk.Label(
+            search_frame,
+            text="Buscar:",
+            bg="#111318",
+            fg="#c7cbd4",
             font=(
                 "Segoe UI",
-                9,
-                "bold",
+                10,
+            ),
+        ).pack(
+            side="left",
+            padx=(0, 8),
+        )
+
+        self.search_var = tk.StringVar()
+
+        search_entry = tk.Entry(
+            search_frame,
+            textvariable=self.search_var,
+            font=(
+                "Segoe UI",
+                10,
             ),
             bg="#252a34",
             fg="white",
-            activebackground="#343a46",
-            activeforeground="white",
+            insertbackground="white",
             relief="flat",
-            cursor="hand2",
-            padx=15,
-            pady=7,
         )
 
-        generator_button.pack(
-            side="right"
+        search_entry.pack(
+            side="left",
+            fill="x",
+            expand=True,
+            ipady=7,
+        )
+
+        self.search_var.trace_add(
+            "write",
+            lambda *_: self.refresh_accounts(),
         )
 
         table_frame = tk.Frame(
@@ -461,6 +802,7 @@ class VaultGitGUI(tk.Tk):
             columns=columns,
             show="headings",
             style="Vault.Treeview",
+            selectmode="browse",
         )
 
         self.accounts_table.heading(
@@ -475,14 +817,19 @@ class VaultGitGUI(tk.Tk):
 
         self.accounts_table.column(
             "service",
-            width=260,
+            width=300,
             anchor="w",
         )
 
         self.accounts_table.column(
             "username",
-            width=500,
+            width=520,
             anchor="w",
+        )
+
+        self.accounts_table.bind(
+            "<Double-1>",
+            lambda event: self.open_account_details(),
         )
 
         scrollbar = ttk.Scrollbar(
@@ -506,20 +853,98 @@ class VaultGitGUI(tk.Tk):
             fill="y",
         )
 
+        actions = tk.Frame(
+            body,
+            bg="#111318",
+        )
+
+        actions.pack(
+            fill="x",
+            pady=(15, 0),
+        )
+
+        self.create_secondary_button(
+            actions,
+            "Ver detalles",
+            self.open_account_details,
+        ).pack(
+            side="left"
+        )
+
+        self.create_secondary_button(
+            actions,
+            "Editar",
+            self.open_edit_account,
+        ).pack(
+            side="left",
+            padx=8,
+        )
+
+        delete_button = tk.Button(
+            actions,
+            text="Eliminar",
+            command=self.delete_selected_account,
+            font=(
+                "Segoe UI",
+                9,
+                "bold",
+            ),
+            bg="#3a2226",
+            fg="#ffb4b4",
+            activebackground="#512b31",
+            activeforeground="white",
+            relief="flat",
+            cursor="hand2",
+            padx=15,
+            pady=7,
+        )
+
+        delete_button.pack(
+            side="left"
+        )
+
         self.refresh_accounts()
 
+    # =========================================================
+    # LISTADO Y BUSQUEDA
+    # =========================================================
+
     def refresh_accounts(self):
+        if self.accounts_table is None:
+            return
+
         for item in self.accounts_table.get_children():
             self.accounts_table.delete(
                 item
             )
 
-        for account in get_accounts(
-            self.vault_data
-        ):
+        query = ""
+
+        if self.search_var is not None:
+            query = self.search_var.get().strip()
+
+        if query:
+            accounts = search_accounts(
+                self.vault_data,
+                query,
+            )
+        else:
+            accounts = get_accounts(
+                self.vault_data
+            )
+
+        for account in accounts:
+            account_id = account.get(
+                "id"
+            )
+
+            if not account_id:
+                continue
+
             self.accounts_table.insert(
                 "",
                 "end",
+                iid=account_id,
                 values=(
                     account.get(
                         "service",
@@ -532,17 +957,64 @@ class VaultGitGUI(tk.Tk):
                 ),
             )
 
-    def open_password_generator(self):
+        total = len(
+            get_accounts(
+                self.vault_data
+            )
+        )
+
+        self.count_label.config(
+            text=f"{total} almacenadas"
+        )
+
+    def get_selected_account(self):
+        selection = (
+            self.accounts_table.selection()
+        )
+
+        if not selection:
+            messagebox.showinfo(
+                "VaultGit",
+                "Selecciona una cuenta primero.",
+            )
+            return None
+
+        account_id = selection[0]
+
+        account = get_account_by_id(
+            self.vault_data,
+            account_id,
+        )
+
+        if account is None:
+            messagebox.showerror(
+                "VaultGit",
+                "No se encontró la cuenta.",
+            )
+            return None
+
+        return account
+
+    # =========================================================
+    # DETALLES
+    # =========================================================
+
+    def open_account_details(self):
+        account = self.get_selected_account()
+
+        if account is None:
+            return
+
         window = tk.Toplevel(
             self
         )
 
         window.title(
-            "Generador de contraseñas"
+            "Detalles de cuenta"
         )
 
         window.geometry(
-            "440x260"
+            "520x460"
         )
 
         window.resizable(
@@ -554,20 +1026,809 @@ class VaultGitGUI(tk.Tk):
             bg="#181b21"
         )
 
-        title = tk.Label(
+        tk.Label(
             window,
-            text="Generador seguro",
+            text=account.get(
+                "service",
+                "Cuenta",
+            ),
             font=(
                 "Segoe UI",
-                17,
+                20,
                 "bold",
             ),
             bg="#181b21",
             fg="white",
+        ).pack(
+            pady=(25, 20)
         )
 
-        title.pack(
-            pady=(25, 15)
+        card = tk.Frame(
+            window,
+            bg="#22262f",
+            padx=25,
+            pady=20,
+        )
+
+        card.pack(
+            fill="both",
+            expand=True,
+            padx=25,
+            pady=(0, 25),
+        )
+
+        self.detail_row(
+            card,
+            "Usuario / correo",
+            account.get(
+                "username",
+                "",
+            ),
+        )
+
+        password_frame = tk.Frame(
+            card,
+            bg="#22262f",
+        )
+
+        password_frame.pack(
+            fill="x",
+            pady=10,
+        )
+
+        tk.Label(
+            password_frame,
+            text="Contraseña",
+            width=18,
+            anchor="w",
+            bg="#22262f",
+            fg="#9ca3af",
+            font=(
+                "Segoe UI",
+                9,
+                "bold",
+            ),
+        ).pack(
+            side="left"
+        )
+
+        hidden_password = tk.StringVar(
+            value="●●●●●●●●●●●●"
+        )
+
+        password_label = tk.Label(
+            password_frame,
+            textvariable=hidden_password,
+            anchor="w",
+            bg="#22262f",
+            fg="white",
+            font=(
+                "Consolas",
+                10,
+            ),
+        )
+
+        password_label.pack(
+            side="left",
+            fill="x",
+            expand=True,
+        )
+
+        is_visible = {
+            "value": False
+        }
+
+        def toggle_account_password():
+            is_visible["value"] = (
+                not is_visible["value"]
+            )
+
+            if is_visible["value"]:
+                hidden_password.set(
+                    account.get(
+                        "password",
+                        "",
+                    )
+                )
+
+                show_button.config(
+                    text="Ocultar"
+                )
+
+            else:
+                hidden_password.set(
+                    "●●●●●●●●●●●●"
+                )
+
+                show_button.config(
+                    text="Mostrar"
+                )
+
+        show_button = tk.Button(
+            password_frame,
+            text="Mostrar",
+            command=toggle_account_password,
+            font=(
+                "Segoe UI",
+                8,
+                "bold",
+            ),
+            bg="#303641",
+            fg="white",
+            activebackground="#414956",
+            activeforeground="white",
+            relief="flat",
+            cursor="hand2",
+            padx=10,
+            pady=4,
+        )
+
+        show_button.pack(
+            side="right"
+        )
+
+        self.detail_row(
+            card,
+            "URL",
+            account.get(
+                "url",
+                "",
+            )
+            or "Sin URL",
+        )
+
+        self.detail_row(
+            card,
+            "Notas",
+            account.get(
+                "notes",
+                "",
+            )
+            or "Sin notas",
+        )
+
+    def detail_row(
+        self,
+        parent,
+        title,
+        value,
+    ):
+        row = tk.Frame(
+            parent,
+            bg="#22262f",
+        )
+
+        row.pack(
+            fill="x",
+            pady=10,
+        )
+
+        tk.Label(
+            row,
+            text=title,
+            width=18,
+            anchor="w",
+            bg="#22262f",
+            fg="#9ca3af",
+            font=(
+                "Segoe UI",
+                9,
+                "bold",
+            ),
+        ).pack(
+            side="left"
+        )
+
+        tk.Label(
+            row,
+            text=value,
+            anchor="w",
+            bg="#22262f",
+            fg="white",
+            wraplength=280,
+            justify="left",
+            font=(
+                "Segoe UI",
+                10,
+            ),
+        ).pack(
+            side="left",
+            fill="x",
+            expand=True,
+        )
+
+    # =========================================================
+    # AÑADIR / EDITAR
+    # =========================================================
+
+    def open_add_account(self):
+        self.open_account_form(
+            account=None
+        )
+
+    def open_edit_account(self):
+        account = self.get_selected_account()
+
+        if account is None:
+            return
+
+        self.open_account_form(
+            account=account
+        )
+
+    def open_account_form(
+        self,
+        account=None,
+    ):
+        editing = (
+            account is not None
+        )
+
+        window = tk.Toplevel(
+            self
+        )
+
+        window.title(
+            (
+                "Editar cuenta"
+                if editing
+                else "Nueva cuenta"
+            )
+        )
+
+        window.geometry(
+            "560x610"
+        )
+
+        window.resizable(
+            False,
+            False,
+        )
+
+        window.configure(
+            bg="#181b21"
+        )
+
+        tk.Label(
+            window,
+            text=(
+                "Editar cuenta"
+                if editing
+                else "Nueva cuenta"
+            ),
+            font=(
+                "Segoe UI",
+                20,
+                "bold",
+            ),
+            bg="#181b21",
+            fg="white",
+        ).pack(
+            pady=(25, 20)
+        )
+
+        form = tk.Frame(
+            window,
+            bg="#181b21",
+        )
+
+        form.pack(
+            fill="both",
+            expand=True,
+            padx=40,
+        )
+
+        service_var = tk.StringVar(
+            value=(
+                account.get(
+                    "service",
+                    "",
+                )
+                if editing
+                else ""
+            )
+        )
+
+        username_var = tk.StringVar(
+            value=(
+                account.get(
+                    "username",
+                    "",
+                )
+                if editing
+                else ""
+            )
+        )
+
+        password_var = tk.StringVar()
+
+        url_var = tk.StringVar(
+            value=(
+                account.get(
+                    "url",
+                    "",
+                )
+                if editing
+                else ""
+            )
+        )
+
+        self.form_label(
+            form,
+            "Servicio"
+        )
+
+        service_entry = self.form_entry(
+            form,
+            service_var,
+        )
+
+        self.form_label(
+            form,
+            "Usuario / correo"
+        )
+
+        self.form_entry(
+            form,
+            username_var,
+        )
+
+        password_title = (
+            "Nueva contraseña "
+            "(vacía = conservar)"
+            if editing
+            else "Contraseña"
+        )
+
+        self.form_label(
+            form,
+            password_title,
+        )
+
+        password_row = tk.Frame(
+            form,
+            bg="#181b21",
+        )
+
+        password_row.pack(
+            fill="x",
+            pady=(0, 12),
+        )
+
+        password_entry = tk.Entry(
+            password_row,
+            textvariable=password_var,
+            show="●",
+            font=(
+                "Segoe UI",
+                10,
+            ),
+            bg="#252a34",
+            fg="white",
+            insertbackground="white",
+            relief="flat",
+        )
+
+        password_entry.pack(
+            side="left",
+            fill="x",
+            expand=True,
+            ipady=7,
+        )
+
+        show_password_state = {
+            "visible": False
+        }
+
+        def toggle_password():
+            show_password_state["visible"] = (
+                not show_password_state[
+                    "visible"
+                ]
+            )
+
+            password_entry.config(
+                show=(
+                    ""
+                    if show_password_state[
+                        "visible"
+                    ]
+                    else "●"
+                )
+            )
+
+            show_button.config(
+                text=(
+                    "Ocultar"
+                    if show_password_state[
+                        "visible"
+                    ]
+                    else "Mostrar"
+                )
+            )
+
+        show_button = tk.Button(
+            password_row,
+            text="Mostrar",
+            command=toggle_password,
+            bg="#303641",
+            fg="white",
+            activebackground="#414956",
+            activeforeground="white",
+            relief="flat",
+            cursor="hand2",
+            padx=10,
+            pady=6,
+        )
+
+        show_button.pack(
+            side="left",
+            padx=(8, 0),
+        )
+
+        def generate_into_field():
+            generated = generate_password(
+                length=20
+            )
+
+            password_var.set(
+                generated
+            )
+
+        self.create_secondary_button(
+            form,
+            "Generar contraseña",
+            generate_into_field,
+        ).pack(
+            anchor="w",
+            pady=(0, 12),
+        )
+
+        self.form_label(
+            form,
+            "URL"
+        )
+
+        self.form_entry(
+            form,
+            url_var,
+        )
+
+        self.form_label(
+            form,
+            "Notas"
+        )
+
+        notes_text = tk.Text(
+            form,
+            height=5,
+            font=(
+                "Segoe UI",
+                10,
+            ),
+            bg="#252a34",
+            fg="white",
+            insertbackground="white",
+            relief="flat",
+            wrap="word",
+        )
+
+        notes_text.pack(
+            fill="x",
+            pady=(0, 18),
+        )
+
+        if editing:
+            notes_text.insert(
+                "1.0",
+                account.get(
+                    "notes",
+                    "",
+                ),
+            )
+
+        buttons = tk.Frame(
+            form,
+            bg="#181b21",
+        )
+
+        buttons.pack(
+            fill="x"
+        )
+
+        self.create_secondary_button(
+            buttons,
+            "Cancelar",
+            window.destroy,
+        ).pack(
+            side="right"
+        )
+
+        def save_account():
+            service = (
+                service_var.get().strip()
+            )
+
+            username = (
+                username_var.get().strip()
+            )
+
+            password = (
+                password_var.get()
+            )
+
+            url = (
+                url_var.get().strip()
+            )
+
+            notes = (
+                notes_text.get(
+                    "1.0",
+                    "end-1c",
+                ).strip()
+            )
+
+            if not service:
+                messagebox.showwarning(
+                    "VaultGit",
+                    (
+                        "El servicio no puede "
+                        "estar vacío."
+                    ),
+                    parent=window,
+                )
+                return
+
+            if (
+                not editing
+                and not password
+            ):
+                messagebox.showwarning(
+                    "VaultGit",
+                    (
+                        "Introduce una contraseña "
+                        "para la cuenta."
+                    ),
+                    parent=window,
+                )
+                return
+
+            candidate_data = copy.deepcopy(
+                self.vault_data
+            )
+
+            if editing:
+                updated = update_account(
+                    candidate_data,
+                    account["id"],
+                    service=service,
+                    username=username,
+                    password=(
+                        password
+                        if password
+                        else None
+                    ),
+                    url=url,
+                    notes=notes,
+                )
+
+                if not updated:
+                    messagebox.showerror(
+                        "VaultGit",
+                        (
+                            "No se pudo encontrar "
+                            "la cuenta."
+                        ),
+                        parent=window,
+                    )
+                    return
+
+            else:
+                add_account(
+                    candidate_data,
+                    service,
+                    username,
+                    password,
+                    url,
+                    notes,
+                )
+
+            try:
+                save_vault_with_session(
+                    VAULT_PATH,
+                    self.session,
+                    candidate_data,
+                )
+
+            except (
+                OSError,
+                ValueError,
+                KeyError,
+                TypeError,
+            ):
+                messagebox.showerror(
+                    "VaultGit",
+                    (
+                        "No se pudieron guardar "
+                        "los cambios."
+                    ),
+                    parent=window,
+                )
+                return
+
+            self.vault_data = (
+                candidate_data
+            )
+
+            password_var.set("")
+
+            self.refresh_accounts()
+
+            window.destroy()
+
+        self.create_primary_button(
+            buttons,
+            (
+                "Guardar cambios"
+                if editing
+                else "Guardar cuenta"
+            ),
+            save_account,
+        ).pack(
+            side="right",
+            padx=(0, 10),
+        )
+
+        service_entry.focus_set()
+
+    def form_label(
+        self,
+        parent,
+        text,
+    ):
+        tk.Label(
+            parent,
+            text=text,
+            bg="#181b21",
+            fg="#c7cbd4",
+            font=(
+                "Segoe UI",
+                9,
+                "bold",
+            ),
+        ).pack(
+            anchor="w",
+            pady=(0, 5),
+        )
+
+    def form_entry(
+        self,
+        parent,
+        variable,
+    ):
+        entry = tk.Entry(
+            parent,
+            textvariable=variable,
+            font=(
+                "Segoe UI",
+                10,
+            ),
+            bg="#252a34",
+            fg="white",
+            insertbackground="white",
+            relief="flat",
+        )
+
+        entry.pack(
+            fill="x",
+            ipady=7,
+            pady=(0, 12),
+        )
+
+        return entry
+
+    # =========================================================
+    # ELIMINAR
+    # =========================================================
+
+    def delete_selected_account(self):
+        account = self.get_selected_account()
+
+        if account is None:
+            return
+
+        confirmed = messagebox.askyesno(
+            "Eliminar cuenta",
+            (
+                "¿Seguro que quieres eliminar "
+                f"'{account.get('service', '')}'?\n\n"
+                "Esta acción no se puede deshacer."
+            ),
+        )
+
+        if not confirmed:
+            return
+
+        candidate_data = copy.deepcopy(
+            self.vault_data
+        )
+
+        deleted = delete_account(
+            candidate_data,
+            account["id"],
+        )
+
+        if not deleted:
+            messagebox.showerror(
+                "VaultGit",
+                "No se pudo eliminar la cuenta.",
+            )
+            return
+
+        try:
+            save_vault_with_session(
+                VAULT_PATH,
+                self.session,
+                candidate_data,
+            )
+
+        except (
+            OSError,
+            ValueError,
+            KeyError,
+            TypeError,
+        ):
+            messagebox.showerror(
+                "VaultGit",
+                (
+                    "No se pudieron guardar "
+                    "los cambios."
+                ),
+            )
+            return
+
+        self.vault_data = candidate_data
+
+        self.refresh_accounts()
+
+    # =========================================================
+    # GENERADOR
+    # =========================================================
+
+    def open_password_generator(self):
+        window = tk.Toplevel(
+            self
+        )
+
+        window.title(
+            "Generador de contraseñas"
+        )
+
+        window.geometry(
+            "460x300"
+        )
+
+        window.resizable(
+            False,
+            False,
+        )
+
+        window.configure(
+            bg="#181b21"
+        )
+
+        tk.Label(
+            window,
+            text="Generador seguro",
+            font=(
+                "Segoe UI",
+                18,
+                "bold",
+            ),
+            bg="#181b21",
+            fg="white",
+        ).pack(
+            pady=(25, 18)
         )
 
         length_frame = tk.Frame(
@@ -582,10 +1843,6 @@ class VaultGitGUI(tk.Tk):
             text="Longitud:",
             bg="#181b21",
             fg="white",
-            font=(
-                "Segoe UI",
-                10,
-            ),
         ).pack(
             side="left",
             padx=(0, 8),
@@ -595,18 +1852,12 @@ class VaultGitGUI(tk.Tk):
             value="20"
         )
 
-        length_entry = tk.Entry(
+        tk.Entry(
             length_frame,
             textvariable=length_var,
             width=6,
             justify="center",
-            font=(
-                "Segoe UI",
-                10,
-            ),
-        )
-
-        length_entry.pack(
+        ).pack(
             side="left"
         )
 
@@ -615,7 +1866,7 @@ class VaultGitGUI(tk.Tk):
         password_entry = tk.Entry(
             window,
             textvariable=password_var,
-            width=38,
+            width=40,
             justify="center",
             font=(
                 "Consolas",
@@ -625,17 +1876,22 @@ class VaultGitGUI(tk.Tk):
         )
 
         password_entry.pack(
-            pady=20,
+            pady=22,
             ipady=7,
         )
 
         def generate():
-            value = length_var.get().strip()
+            value = (
+                length_var.get().strip()
+            )
 
             if not value.isdigit():
                 messagebox.showwarning(
                     "VaultGit",
-                    "Introduce una longitud válida.",
+                    (
+                        "Introduce una longitud "
+                        "válida."
+                    ),
                     parent=window,
                 )
                 return
@@ -659,30 +1915,29 @@ class VaultGitGUI(tk.Tk):
                 password
             )
 
-        generate_button = tk.Button(
+        self.create_primary_button(
             window,
-            text="Generar",
-            command=generate,
-            font=(
-                "Segoe UI",
-                10,
-                "bold",
-            ),
-            bg="#315efb",
-            fg="white",
-            activebackground="#2448c7",
-            activeforeground="white",
-            relief="flat",
-            cursor="hand2",
-            padx=30,
-            pady=7,
-        )
+            "Generar",
+            generate,
+        ).pack()
 
-        generate_button.pack()
+    # =========================================================
+    # BLOQUEO Y CIERRE
+    # =========================================================
 
     def lock_vault(self):
         self.vault_data = None
+        self.session = None
+        self.search_var = None
+        self.accounts_table = None
+
         self.show_unlock_screen()
+
+    def on_close(self):
+        self.vault_data = None
+        self.session = None
+
+        self.destroy()
 
 
 def main():
