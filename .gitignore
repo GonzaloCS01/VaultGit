@@ -33,3 +33,8 @@ Thumbs.db
 
 # Pytest
 .pytest_cache/
+
+# PyInstaller build artifacts
+/build/
+/dist/
+/VaultGit.spec
