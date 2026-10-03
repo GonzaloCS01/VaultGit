@@ -23,6 +23,39 @@ VaultGit 1.0.0 is currently designed for local Windows use.
 
 ---
 
+## Screenshots
+
+### Dashboard
+
+<p align="center">
+  <img src="docs/screenshots/01-dashboard.png" alt="VaultGit dashboard" width="100%">
+</p>
+
+### Unlock Screen
+
+<p align="center">
+  <img src="docs/screenshots/02-unlock.png" alt="VaultGit unlock screen" width="82%">
+</p>
+
+### Security & About
+
+<table>
+  <tr>
+    <td width="58%" align="center">
+      <img src="docs/screenshots/03-security.png" alt="VaultGit security settings" width="100%">
+      <br>
+      <sub><strong>Argon2id security profile</strong></sub>
+    </td>
+    <td width="42%" align="center">
+      <img src="docs/screenshots/04-about.png" alt="VaultGit about window" width="100%">
+      <br>
+      <sub><strong>VaultGit 1.0.0 identity and credits</strong></sub>
+    </td>
+  </tr>
+</table>
+
+---
+
 ## Features
 
 - Encrypted local credential vault
@@ -325,6 +358,13 @@ VaultGit/
 │   ├── vaultgit-icon-256.png
 │   └── vaultgit.ico
 │
+├── docs/
+│   └── screenshots/
+│       ├── 01-dashboard.png
+│       ├── 02-unlock.png
+│       ├── 03-security.png
+│       └── 04-about.png
+│
 ├── packaging/
 │   ├── VaultGit.spec
 │   ├── build_release.ps1
@@ -348,6 +388,8 @@ VaultGit/
 ├── tools/
 ├── .gitignore
 ├── README.md
+├── SECURITY.md
+├── RELEASE_NOTES_1.0.0.md
 └── requirements.txt
 ```
 
