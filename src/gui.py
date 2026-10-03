@@ -19,6 +19,18 @@ from auth_guard import UnlockThrottle
 from password_policy import validate_master_password
 from paths import BACKUP_DIR, VAULT_PATH
 
+from app_config import (
+    APP_AUTHOR,
+    APP_AUTHOR_ROLE,
+    APP_COPYRIGHT,
+    APP_ICON_ICO_PATH,
+    APP_ICON_PNG_PATH,
+    APP_NAME,
+    APP_TAGLINE,
+    APP_VERSION,
+    get_window_title,
+)
+
 from backup import (
     create_backup,
     list_backups,
@@ -40,10 +52,18 @@ class VaultGitGUI(tk.Tk):
     def __init__(self):
         super().__init__()
 
-        self.title("VaultGit")
+        self.title(get_window_title())
         self.geometry("1000x620")
         self.minsize(900, 560)
         self.configure(bg="#111318")
+
+        # Recursos visuales de marca.
+        self.brand_icon_source = None
+        self.brand_icon_small = None
+        self.brand_logo_large = None
+
+        self.load_brand_assets()
+        self.apply_window_branding(self)
 
         # Datos sensibles disponibles solamente
         # mientras la bóveda permanece desbloqueada.
@@ -81,6 +101,292 @@ class VaultGitGUI(tk.Tk):
             self.show_unlock_screen()
         else:
             self.show_create_vault_screen()
+
+    # =========================================================
+    # BRANDING
+    # =========================================================
+
+    def load_brand_assets(self):
+        """
+        Carga las imágenes oficiales una sola vez.
+        Si un recurso no puede cargarse, la bóveda
+        continúa siendo accesible sin bloquear la app.
+        """
+
+        try:
+            if APP_ICON_PNG_PATH.is_file():
+                self.brand_icon_source = tk.PhotoImage(
+                    file=str(APP_ICON_PNG_PATH)
+                )
+
+                self.brand_icon_small = (
+                    self.brand_icon_source.subsample(
+                        8,
+                        8,
+                    )
+                )
+
+                self.brand_logo_large = (
+                    self.brand_icon_source.subsample(
+                        2,
+                        2,
+                    )
+                )
+
+        except tk.TclError:
+            self.brand_icon_source = None
+            self.brand_icon_small = None
+            self.brand_logo_large = None
+
+    def apply_window_branding(self, window):
+        """
+        Aplica el icono oficial a una ventana.
+        """
+
+        if self.brand_icon_source is not None:
+            try:
+                window.iconphoto(
+                    window is self,
+                    self.brand_icon_source,
+                )
+            except tk.TclError:
+                pass
+
+        try:
+            if APP_ICON_ICO_PATH.is_file():
+                window.iconbitmap(
+                    str(APP_ICON_ICO_PATH)
+                )
+        except (
+            tk.TclError,
+            OSError,
+        ):
+            pass
+
+    def create_access_branding(
+        self,
+        parent,
+        subtitle,
+    ):
+        """
+        Encabezado reutilizable para creación/desbloqueo.
+        """
+
+        if self.brand_logo_large is not None:
+            tk.Label(
+                parent,
+                image=self.brand_logo_large,
+                bg="#111318",
+                bd=0,
+            ).pack(
+                pady=(0, 10)
+            )
+
+        tk.Label(
+            parent,
+            text=APP_NAME,
+            font=(
+                "Segoe UI",
+                30,
+                "bold",
+            ),
+            bg="#111318",
+            fg="white",
+        ).pack(
+            pady=(0, 2)
+        )
+
+        tk.Label(
+            parent,
+            text=APP_TAGLINE,
+            font=(
+                "Segoe UI",
+                10,
+                "bold",
+            ),
+            bg="#111318",
+            fg="#5ca8ff",
+        ).pack(
+            pady=(0, 4)
+        )
+
+        tk.Label(
+            parent,
+            text=subtitle,
+            font=(
+                "Segoe UI",
+                10,
+            ),
+            bg="#111318",
+            fg="#9ca3af",
+        ).pack(
+            pady=(0, 20)
+        )
+
+    def open_about_window(self):
+        window = tk.Toplevel(
+            self
+        )
+
+        self.apply_window_branding(
+            window
+        )
+
+        window.title(
+            f"Acerca de {APP_NAME}"
+        )
+
+        window.geometry(
+            "500x540"
+        )
+
+        window.resizable(
+            False,
+            False,
+        )
+
+        window.configure(
+            bg="#181b21"
+        )
+
+        window.transient(
+            self
+        )
+
+        if self.brand_logo_large is not None:
+            tk.Label(
+                window,
+                image=self.brand_logo_large,
+                bg="#181b21",
+                bd=0,
+            ).pack(
+                pady=(30, 12)
+            )
+
+        tk.Label(
+            window,
+            text=APP_NAME,
+            font=(
+                "Segoe UI",
+                25,
+                "bold",
+            ),
+            bg="#181b21",
+            fg="white",
+        ).pack()
+
+        tk.Label(
+            window,
+            text=f"Version {APP_VERSION}",
+            font=(
+                "Segoe UI",
+                10,
+                "bold",
+            ),
+            bg="#181b21",
+            fg="#5ca8ff",
+        ).pack(
+            pady=(3, 3)
+        )
+
+        tk.Label(
+            window,
+            text=APP_TAGLINE,
+            font=(
+                "Segoe UI",
+                10,
+            ),
+            bg="#181b21",
+            fg="#c7cbd4",
+        ).pack(
+            pady=(0, 22)
+        )
+
+        tk.Frame(
+            window,
+            bg="#303641",
+            height=1,
+        ).pack(
+            fill="x",
+            padx=55,
+            pady=(0, 22),
+        )
+
+        tk.Label(
+            window,
+            text="Developed by",
+            font=(
+                "Segoe UI",
+                9,
+            ),
+            bg="#181b21",
+            fg="#9ca3af",
+        ).pack()
+
+        tk.Label(
+            window,
+            text=APP_AUTHOR,
+            font=(
+                "Segoe UI",
+                14,
+                "bold",
+            ),
+            bg="#181b21",
+            fg="white",
+        ).pack(
+            pady=(3, 2)
+        )
+
+        tk.Label(
+            window,
+            text=APP_AUTHOR_ROLE,
+            font=(
+                "Segoe UI",
+                9,
+            ),
+            bg="#181b21",
+            fg="#c7cbd4",
+        ).pack()
+
+        tk.Label(
+            window,
+            text=(
+                "Gestor local de credenciales diseñado "
+                "con cifrado autenticado, derivación de "
+                "claves resistente a ataques offline y "
+                "backups cifrados."
+            ),
+            font=(
+                "Segoe UI",
+                9,
+            ),
+            bg="#181b21",
+            fg="#9ca3af",
+            wraplength=390,
+            justify="center",
+        ).pack(
+            pady=(22, 18)
+        )
+
+        tk.Label(
+            window,
+            text=APP_COPYRIGHT,
+            font=(
+                "Segoe UI",
+                8,
+            ),
+            bg="#181b21",
+            fg="#6f7682",
+        ).pack(
+            pady=(0, 15)
+        )
+
+        self.create_primary_button(
+            window,
+            "Cerrar",
+            window.destroy,
+            width=16,
+        ).pack()
 
     # =========================================================
     # ESTILOS
@@ -192,7 +498,7 @@ class VaultGitGUI(tk.Tk):
         self.lock_vault()
 
         messagebox.showinfo(
-            "VaultGit",
+            APP_NAME,
             (
                 "La bóveda se bloqueó "
                 "automáticamente por inactividad."
@@ -226,7 +532,7 @@ class VaultGitGUI(tk.Tk):
 
         if not value:
             messagebox.showwarning(
-                "VaultGit",
+                APP_NAME,
                 "No hay una contraseña para copiar.",
             )
             return
@@ -242,7 +548,7 @@ class VaultGitGUI(tk.Tk):
 
         except tk.TclError:
             messagebox.showerror(
-                "VaultGit",
+                APP_NAME,
                 "No se pudo acceder al portapapeles.",
             )
             return
@@ -255,7 +561,7 @@ class VaultGitGUI(tk.Tk):
         )
 
         messagebox.showinfo(
-            "VaultGit",
+            APP_NAME,
             (
                 "Contraseña copiada.\n\n"
                 "VaultGit intentará retirarla del "
@@ -392,31 +698,9 @@ class VaultGitGUI(tk.Tk):
             anchor="center",
         )
 
-        tk.Label(
+        self.create_access_branding(
             container,
-            text="VaultGit",
-            font=(
-                "Segoe UI",
-                30,
-                "bold",
-            ),
-            bg="#111318",
-            fg="white",
-        ).pack(
-            pady=(0, 5)
-        )
-
-        tk.Label(
-            container,
-            text="Crear nueva bóveda cifrada",
-            font=(
-                "Segoe UI",
-                11,
-            ),
-            bg="#111318",
-            fg="#9ca3af",
-        ).pack(
-            pady=(0, 25)
+            "Crear nueva bóveda cifrada",
         )
 
         card = tk.Frame(
@@ -562,7 +846,7 @@ class VaultGitGUI(tk.Tk):
 
             if not password:
                 messagebox.showwarning(
-                    "VaultGit",
+                    APP_NAME,
                     "Introduce una contraseña maestra.",
                 )
                 return
@@ -573,14 +857,14 @@ class VaultGitGUI(tk.Tk):
 
             if not password_is_valid:
                 messagebox.showwarning(
-                    "VaultGit",
+                    APP_NAME,
                     password_error,
                 )
                 return
 
             if password != confirmation:
                 messagebox.showwarning(
-                    "VaultGit",
+                    APP_NAME,
                     "Las contraseñas no coinciden.",
                 )
                 return
@@ -611,7 +895,7 @@ class VaultGitGUI(tk.Tk):
                 binascii.Error,
             ):
                 messagebox.showerror(
-                    "VaultGit",
+                    APP_NAME,
                     "No se pudo crear la bóveda.",
                 )
                 return
@@ -658,31 +942,9 @@ class VaultGitGUI(tk.Tk):
             anchor="center",
         )
 
-        tk.Label(
+        self.create_access_branding(
             container,
-            text="VaultGit",
-            font=(
-                "Segoe UI",
-                30,
-                "bold",
-            ),
-            bg="#111318",
-            fg="white",
-        ).pack(
-            pady=(0, 5)
-        )
-
-        tk.Label(
-            container,
-            text="Bóveda personal cifrada",
-            font=(
-                "Segoe UI",
-                11,
-            ),
-            bg="#111318",
-            fg="#9ca3af",
-        ).pack(
-            pady=(0, 30)
+            "Bóveda personal cifrada",
         )
 
         card = tk.Frame(
@@ -887,7 +1149,7 @@ class VaultGitGUI(tk.Tk):
 
         if not password:
             messagebox.showwarning(
-                "VaultGit",
+                APP_NAME,
                 "Introduce tu contraseña maestra.",
             )
             return
@@ -916,7 +1178,7 @@ class VaultGitGUI(tk.Tk):
             self.password_var.set("")
 
             messagebox.showerror(
-                "VaultGit",
+                APP_NAME,
                 (
                     "La bóveda está dañada "
                     "o tiene un formato incompatible."
@@ -959,19 +1221,62 @@ class VaultGitGUI(tk.Tk):
             False
         )
 
-        tk.Label(
+        brand_frame = tk.Frame(
             top_bar,
-            text="🔐 VaultGit",
+            bg="#181b21",
+        )
+
+        brand_frame.pack(
+            side="left",
+            padx=25,
+        )
+
+        if self.brand_icon_small is not None:
+            tk.Label(
+                brand_frame,
+                image=self.brand_icon_small,
+                bg="#181b21",
+                bd=0,
+            ).pack(
+                side="left",
+                padx=(0, 10),
+            )
+
+        brand_text = tk.Frame(
+            brand_frame,
+            bg="#181b21",
+        )
+
+        brand_text.pack(
+            side="left"
+        )
+
+        tk.Label(
+            brand_text,
+            text=APP_NAME,
             font=(
                 "Segoe UI",
-                20,
+                18,
                 "bold",
             ),
             bg="#181b21",
             fg="white",
         ).pack(
-            side="left",
-            padx=25,
+            anchor="w"
+        )
+
+        tk.Label(
+            brand_text,
+            text=f"v{APP_VERSION}",
+            font=(
+                "Segoe UI",
+                8,
+                "bold",
+            ),
+            bg="#181b21",
+            fg="#6f9ee8",
+        ).pack(
+            anchor="w"
         )
 
         self.create_secondary_button(
@@ -980,7 +1285,15 @@ class VaultGitGUI(tk.Tk):
             self.lock_vault,
         ).pack(
             side="right",
-            padx=25,
+            padx=(10, 25),
+        )
+
+        self.create_secondary_button(
+            top_bar,
+            "Acerca de",
+            self.open_about_window,
+        ).pack(
+            side="right",
         )
 
         body = tk.Frame(
@@ -1314,7 +1627,7 @@ class VaultGitGUI(tk.Tk):
 
         if not selection:
             messagebox.showinfo(
-                "VaultGit",
+                APP_NAME,
                 "Selecciona una cuenta primero.",
             )
             return None
@@ -1328,7 +1641,7 @@ class VaultGitGUI(tk.Tk):
 
         if account is None:
             messagebox.showerror(
-                "VaultGit",
+                APP_NAME,
                 "No se encontró la cuenta.",
             )
             return None
@@ -1349,8 +1662,12 @@ class VaultGitGUI(tk.Tk):
             self
         )
 
+        self.apply_window_branding(
+            window
+        )
+
         window.title(
-            "Detalles de cuenta"
+            f"Detalles de cuenta — {APP_NAME}"
         )
 
         window.geometry(
@@ -1635,11 +1952,15 @@ class VaultGitGUI(tk.Tk):
             self
         )
 
+        self.apply_window_branding(
+            window
+        )
+
         window.title(
             (
-                "Editar cuenta"
+                f"Editar cuenta — {APP_NAME}"
                 if editing
-                else "Nueva cuenta"
+                else f"Nueva cuenta — {APP_NAME}"
             )
         )
 
@@ -1937,7 +2258,7 @@ class VaultGitGUI(tk.Tk):
 
             if not service:
                 messagebox.showwarning(
-                    "VaultGit",
+                    APP_NAME,
                     (
                         "El servicio no puede "
                         "estar vacío."
@@ -1951,7 +2272,7 @@ class VaultGitGUI(tk.Tk):
                 and not password
             ):
                 messagebox.showwarning(
-                    "VaultGit",
+                    APP_NAME,
                     (
                         "Introduce una contraseña "
                         "para la cuenta."
@@ -1981,7 +2302,7 @@ class VaultGitGUI(tk.Tk):
 
                 if not updated:
                     messagebox.showerror(
-                        "VaultGit",
+                        APP_NAME,
                         (
                             "No se pudo encontrar "
                             "la cuenta."
@@ -2022,7 +2343,7 @@ class VaultGitGUI(tk.Tk):
                 TypeError,
             ):
                 messagebox.showerror(
-                    "VaultGit",
+                    APP_NAME,
                     (
                         "No se pudieron guardar "
                         "los cambios."
@@ -2133,7 +2454,7 @@ class VaultGitGUI(tk.Tk):
 
         if not deleted:
             messagebox.showerror(
-                "VaultGit",
+                APP_NAME,
                 "No se pudo eliminar la cuenta.",
             )
             return
@@ -2160,7 +2481,7 @@ class VaultGitGUI(tk.Tk):
             TypeError,
         ):
             messagebox.showerror(
-                "VaultGit",
+                APP_NAME,
                 (
                     "No se pudieron guardar "
                     "los cambios."
@@ -2182,8 +2503,12 @@ class VaultGitGUI(tk.Tk):
             self
         )
 
+        self.apply_window_branding(
+            window
+        )
+
         window.title(
-            "Seguridad de la bóveda"
+            f"Seguridad — {APP_NAME}"
         )
 
         window.geometry(
@@ -2458,7 +2783,7 @@ class VaultGitGUI(tk.Tk):
 
             if not password:
                 messagebox.showwarning(
-                    "VaultGit",
+                    APP_NAME,
                     "Introduce tu contraseña maestra.",
                     parent=window,
                 )
@@ -2474,7 +2799,7 @@ class VaultGitGUI(tk.Tk):
 
             except CryptoError:
                 messagebox.showerror(
-                    "VaultGit",
+                    APP_NAME,
                     "Contraseña maestra incorrecta.",
                     parent=window,
                 )
@@ -2488,7 +2813,7 @@ class VaultGitGUI(tk.Tk):
                 binascii.Error,
             ):
                 messagebox.showerror(
-                    "VaultGit",
+                    APP_NAME,
                     (
                         "No se pudo verificar la bóveda "
                         "antes de la actualización."
@@ -2515,7 +2840,7 @@ class VaultGitGUI(tk.Tk):
 
             except CryptoError:
                 messagebox.showerror(
-                    "VaultGit",
+                    APP_NAME,
                     (
                         "La contraseña dejó de ser válida "
                         "durante la migración."
@@ -2532,7 +2857,7 @@ class VaultGitGUI(tk.Tk):
                 binascii.Error,
             ):
                 messagebox.showerror(
-                    "VaultGit",
+                    APP_NAME,
                     (
                         "No se pudo completar la actualización. "
                         "La bóveda no debería quedar modificada."
@@ -2552,7 +2877,7 @@ class VaultGitGUI(tk.Tk):
             refresh_security_status()
 
             messagebox.showinfo(
-                "VaultGit",
+                APP_NAME,
                 (
                     "Protección Argon2id actualizada "
                     "correctamente.\n\n"
@@ -2577,8 +2902,12 @@ class VaultGitGUI(tk.Tk):
             self
         )
 
+        self.apply_window_branding(
+            window
+        )
+
         window.title(
-            "Backups cifrados"
+            f"Backups — {APP_NAME}"
         )
 
         window.geometry(
@@ -2711,7 +3040,7 @@ class VaultGitGUI(tk.Tk):
                 FileNotFoundError,
             ):
                 messagebox.showerror(
-                    "VaultGit",
+                    APP_NAME,
                     "No se pudo crear el backup.",
                     parent=window,
                 )
@@ -2720,7 +3049,7 @@ class VaultGitGUI(tk.Tk):
             refresh_backup_list()
 
             messagebox.showinfo(
-                "VaultGit",
+                APP_NAME,
                 (
                     "Backup cifrado creado:\n\n"
                     f"{backup_path.name}"
@@ -2733,7 +3062,7 @@ class VaultGitGUI(tk.Tk):
 
             if not selection:
                 messagebox.showinfo(
-                    "VaultGit",
+                    APP_NAME,
                     "Selecciona un backup primero.",
                     parent=window,
                 )
@@ -2776,7 +3105,7 @@ class VaultGitGUI(tk.Tk):
 
             if not password:
                 messagebox.showwarning(
-                    "VaultGit",
+                    APP_NAME,
                     "Introduce una contraseña maestra.",
                     parent=window,
                 )
@@ -2796,7 +3125,7 @@ class VaultGitGUI(tk.Tk):
 
             except CryptoError:
                 messagebox.showerror(
-                    "VaultGit",
+                    APP_NAME,
                     (
                         "Contraseña incorrecta "
                         "o backup manipulado."
@@ -2813,7 +3142,7 @@ class VaultGitGUI(tk.Tk):
                 binascii.Error,
             ):
                 messagebox.showerror(
-                    "VaultGit",
+                    APP_NAME,
                     (
                         "No se pudo restaurar "
                         "el backup seleccionado."
@@ -2833,7 +3162,7 @@ class VaultGitGUI(tk.Tk):
 
             if safety_backup is not None:
                 messagebox.showinfo(
-                    "VaultGit",
+                    APP_NAME,
                     (
                         "Backup restaurado correctamente.\n\n"
                         "También se creó una copia "
@@ -2843,7 +3172,7 @@ class VaultGitGUI(tk.Tk):
                 )
             else:
                 messagebox.showinfo(
-                    "VaultGit",
+                    APP_NAME,
                     "Backup restaurado correctamente.",
                 )
 
@@ -2894,8 +3223,12 @@ class VaultGitGUI(tk.Tk):
             self
         )
 
+        self.apply_window_branding(
+            window
+        )
+
         window.title(
-            "Generador de contraseñas"
+            f"Generador de contraseñas — {APP_NAME}"
         )
 
         window.geometry(
@@ -2981,7 +3314,7 @@ class VaultGitGUI(tk.Tk):
 
             if not value.isdigit():
                 messagebox.showwarning(
-                    "VaultGit",
+                    APP_NAME,
                     (
                         "Introduce una longitud "
                         "válida."
@@ -2999,7 +3332,7 @@ class VaultGitGUI(tk.Tk):
 
             except ValueError as error:
                 messagebox.showwarning(
-                    "VaultGit",
+                    APP_NAME,
                     str(error),
                     parent=window,
                 )
